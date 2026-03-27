@@ -1,13 +1,9 @@
 import { db } from "./firebase.js";
 import {
-  collection,
-  addDoc,
-  getDocs,
-  updateDoc,
-  doc
+  collection, addDoc, getDocs, updateDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-const taskList = document.getElementById("taskList");
+const dashboard = document.getElementById("dashboard");
 
 window.addTask = async function () {
   const task = document.getElementById("task").value;
@@ -20,47 +16,54 @@ window.addTask = async function () {
 
   await addDoc(collection(db, "tasks"), {
     title: task,
-    priority: priority,
+    priority,
     assignedTo: employee,
-    dueDate: dueDate,
+    dueDate,
     status: "pending",
     createdAt: new Date()
   });
 
-  alert("Task Added");
   loadTasks();
 };
 
 async function loadTasks() {
-  taskList.innerHTML = "";
-  const querySnapshot = await getDocs(collection(db, "tasks"));
+  dashboard.innerHTML = "";
+  const snapshot = await getDocs(collection(db, "tasks"));
 
-  querySnapshot.forEach((docSnap) => {
+  let grouped = {};
+
+  snapshot.forEach(docSnap => {
     const data = docSnap.data();
+    if (!grouped[data.assignedTo]) grouped[data.assignedTo] = [];
+    grouped[data.assignedTo].push({ id: docSnap.id, ...data });
+  });
 
-    const li = document.createElement("li");
+  Object.keys(grouped).forEach(emp => {
+    const card = document.createElement("div");
+    card.className = "card";
 
-    const delay = Math.floor(
-      (new Date() - data.dueDate.toDate()) / (1000 * 60 * 60 * 24)
-    );
+    let content = `<div class="employee">${emp}</div>`;
 
-    li.innerHTML = `
-      <b>${data.title}</b> 
-      (${data.priority}) 
-      - ${data.assignedTo}
-      - Delay: ${delay > 0 ? delay + " days" : "On time"}
-      <button onclick="completeTask('${docSnap.id}')">Done</button>
-    `;
+    grouped[emp].forEach(task => {
+      const delay = Math.floor((new Date() - task.dueDate.toDate()) / (1000*60*60*24));
 
-    taskList.appendChild(li);
+      content += `
+        <div class="task ${task.priority}">
+          ${task.title} (${task.priority})<br>
+          Delay: ${delay > 0 ? delay + " days" : "On time"}<br>
+          <button onclick="completeTask('${task.id}')">Done</button>
+        </div>
+      `;
+    });
+
+    card.innerHTML = content;
+    dashboard.appendChild(card);
   });
 }
 
-window.completeTask = async function (id) {
-  const ref = doc(db, "tasks", id);
-  await updateDoc(ref, {
-    status: "completed",
-    completedAt: new Date()
+window.completeTask = async function(id) {
+  await updateDoc(doc(db, "tasks", id), {
+    status: "completed"
   });
   loadTasks();
 };
