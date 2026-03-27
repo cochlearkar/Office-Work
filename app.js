@@ -18,7 +18,7 @@ const dashboard = document.getElementById("dashboard");
 const empDiv = document.getElementById("employees");
 const mainBtn = document.getElementById("mainBtn");
 
-// Select Department
+// Department selection
 window.selectDepartment = function (dept) {
   selectedDept = dept;
   selectedEmployee = "";
@@ -36,7 +36,7 @@ window.selectDepartment = function (dept) {
   });
 };
 
-// Highlight employee
+// Highlight
 function highlightEmployee(emp) {
   const buttons = empDiv.querySelectorAll("button");
   buttons.forEach(btn => {
@@ -44,14 +44,14 @@ function highlightEmployee(emp) {
   });
 }
 
-// Add / Update Task
+// Add / Update
 window.addTask = async function () {
   const task = document.getElementById("task").value;
   const priority = document.getElementById("priority").value;
   const days = parseInt(document.getElementById("days").value);
 
   if (!selectedDept || !selectedEmployee || !task || !days) {
-    alert("Select department, employee and fill all fields");
+    alert("Fill all fields");
     return;
   }
 
@@ -87,16 +87,14 @@ window.addTask = async function () {
   loadTasks();
 };
 
-// Edit Task
+// Edit
 window.editTask = function (task) {
   selectedDept = task.department;
   selectedEmployee = task.assignedTo;
 
   selectDepartment(task.department);
 
-  setTimeout(() => {
-    highlightEmployee(task.assignedTo);
-  }, 100);
+  setTimeout(() => highlightEmployee(task.assignedTo), 100);
 
   document.getElementById("task").value = task.title;
   document.getElementById("priority").value = task.priority;
@@ -112,13 +110,30 @@ window.editTask = function (task) {
   mainBtn.innerText = "Update Task";
 };
 
-// Clear form
+// Clear
 function clearForm() {
   document.getElementById("task").value = "";
   document.getElementById("days").value = "";
 }
 
-// Load Tasks (GROUPED + COLOR)
+// Convert days to label
+function getDayLabel(dueDate) {
+  const today = new Date();
+  const diff = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+
+  if (diff <= 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  return "In " + diff + " days";
+}
+
+// Priority color
+function getPriorityColor(priority) {
+  if (priority === "high") return "red";
+  if (priority === "medium") return "orange";
+  return "green";
+}
+
+// Load Tasks
 async function loadTasks() {
   dashboard.innerHTML = "";
   const snapshot = await getDocs(collection(db, "tasks"));
@@ -139,57 +154,35 @@ async function loadTasks() {
   Object.keys(grouped).forEach(dept => {
 
     const deptTitle = document.createElement("div");
-    deptTitle.className = "department";
-    deptTitle.innerHTML = dept.toUpperCase();
+    deptTitle.innerHTML = "<b>" + dept.toUpperCase() + "</b><br>";
     dashboard.appendChild(deptTitle);
 
     Object.keys(grouped[dept]).forEach(emp => {
-      const tasks = grouped[dept][emp];
 
-      let overdue = 0;
-      let oldest = 0;
+      const empTitle = document.createElement("div");
+      empTitle.innerHTML = "<b>" + emp + "</b>";
+      dashboard.appendChild(empTitle);
 
-      tasks.forEach(t => {
-        if (t.dueDate && t.dueDate.toDate) {
-          const d = Math.floor((new Date() - t.dueDate.toDate()) / (1000*60*60*24));
-          if (d > 0) {
-            overdue++;
-            if (d > oldest) oldest = d;
-          }
-        }
-      });
+      grouped[dept][emp].forEach(task => {
+        const due = task.dueDate.toDate();
+        const dayLabel = getDayLabel(due);
+        const color = getPriorityColor(task.priority);
 
-      // Workload color
-      let color = "green";
-      if (tasks.length > 5) color = "red";
-      else if (tasks.length > 2) color = "yellow";
+        const row = document.createElement("div");
 
-      const card = document.createElement("div");
-      card.className = "card " + color;
-
-      let content = `
-        <div class="employee">${emp}</div>
-        <div class="summary">
-          Pending: ${tasks.length} | Overdue: ${overdue} | Oldest: ${oldest} days
-        </div>
-      `;
-
-      tasks.forEach(task => {
-        const delay = Math.floor((new Date() - task.dueDate.toDate()) / (1000*60*60*24));
-
-        content += `
-          <div class="task">
-            ${task.title} (${task.priority})<br>
-            Delay: ${delay > 0 ? delay + " days" : "On time"}<br>
-
-            <button onclick='editTask(${JSON.stringify(task)})'>Edit</button>
-            <button onclick="completeTask('${task.id}')">Done</button>
-          </div>
+        row.innerHTML = `
+          ${task.title} 
+          <span style="color:${color}">(${task.priority})</span> 
+          (${dayLabel})
+          
+          <button onclick='editTask(${JSON.stringify(task)})'>Edit</button>
+          <button onclick="completeTask('${task.id}')">Done</button>
         `;
+
+        dashboard.appendChild(row);
       });
 
-      card.innerHTML = content;
-      dashboard.appendChild(card);
+      dashboard.appendChild(document.createElement("hr"));
     });
   });
 }
