@@ -1,26 +1,74 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Task Manager</title>
-  <link rel="stylesheet" href="style.css">
+  <title>Office Task Manager</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      margin: 20px;
+    }
+
+    h2 {
+      text-align: center;
+    }
+
+    button {
+      margin: 5px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .form {
+      margin-top: 15px;
+      margin-bottom: 20px;
+    }
+
+    input, select {
+      margin: 5px;
+      padding: 6px;
+    }
+
+    .card {
+      border-radius: 10px;
+      padding: 10px;
+      margin: 10px 0;
+      color: black;
+    }
+
+    .green { background-color: #d4edda; }
+    .yellow { background-color: #fff3cd; }
+    .red { background-color: #f8d7da; }
+
+    .employee {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    hr {
+      margin: 8px 0;
+    }
+  </style>
 </head>
+
 <body>
 
-<h2>Department Task Dashboard</h2>
+<h2>Office Task Manager</h2>
 
-<!-- Departments -->
+<!-- Department Buttons -->
 <div>
+  <b>Select Department:</b><br>
   <button onclick="selectDepartment('child')">Child Health</button>
   <button onclick="selectDepartment('oral')">Oral Health</button>
   <button onclick="selectDepartment('ci')">Cochlear Implant</button>
 </div>
 
-<!-- Employees -->
-<div id="employees"></div>
+<!-- Employee Buttons -->
+<div id="employees" style="margin-top:10px;"></div>
 
-<!-- Form -->
+<!-- Task Form -->
 <div class="form">
-  <input id="task" placeholder="Task" />
+  <input id="task" placeholder="Enter Task" />
 
   <select id="priority">
     <option value="high">High</option>
@@ -28,11 +76,19 @@
     <option value="low">Low</option>
   </select>
 
+  <select id="repeat">
+    <option value="none">No Repeat</option>
+    <option value="daily">Daily</option>
+    <option value="weekly">Weekly</option>
+    <option value="7">Every 7 Days</option>
+  </select>
+
   <input id="days" type="number" placeholder="Deadline (days)" />
 
   <button id="mainBtn" onclick="addTask()">Add Task</button>
 </div>
 
+<!-- Dashboard -->
 <div id="dashboard"></div>
 
 <script type="module" src="app.js"></script>
