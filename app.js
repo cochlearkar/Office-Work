@@ -108,7 +108,6 @@ window.editTask = async function (id) {
   selectedEmployee = task.assignedTo;
 
   selectDepartment(task.department);
-
   setTimeout(() => highlightEmployee(task.assignedTo), 100);
 
   document.getElementById("task").value = task.title;
@@ -142,7 +141,6 @@ async function loadTasks() {
 
   snapshot.forEach(docSnap => {
     const data = docSnap.data();
-    if (data.status === "completed") return;
 
     if (!grouped[data.assignedTo]) grouped[data.assignedTo] = {};
     if (!grouped[data.assignedTo][data.department])
@@ -153,11 +151,11 @@ async function loadTasks() {
 
   Object.keys(grouped).forEach(emp => {
 
-    let allTasks = Object.values(grouped[emp]).flat();
+    let activeTasks = Object.values(grouped[emp]).flat().filter(t => t.status !== "completed");
 
     let color = "green";
-    if (allTasks.length > 5) color = "red";
-    else if (allTasks.length > 2) color = "yellow";
+    if (activeTasks.length > 5) color = "red";
+    else if (activeTasks.length > 2) color = "yellow";
 
     const card = document.createElement("div");
     card.className = "card " + color;
@@ -170,7 +168,6 @@ async function loadTasks() {
 
       let count = 1;
 
-      // 🔥 SORTING LOGIC
       grouped[emp][dept]
         .sort((a, b) => {
           const dateA = a.dueDate.toDate();
@@ -193,19 +190,27 @@ async function loadTasks() {
           let colorText = task.priority === "high" ? "red" :
                           task.priority === "medium" ? "orange" : "green";
 
+          let style = task.status === "completed"
+            ? "text-decoration: line-through; opacity:0.6;"
+            : "";
+
           content += `
-            ${count}.
-            <input type="checkbox" onchange="completeTask('${task.id}')">
+            <span style="cursor:pointer; ${style}" onclick="editTask('${task.id}')">
 
-            ${task.title}
-            <span style="color:${colorText}">(${task.priority})</span>
-            (${label})
+              ${count}.
+              <input type="checkbox"
+                ${task.status === "completed" ? "checked" : ""}
+                onchange="completeTask('${task.id}')">
 
-            <span style="cursor:pointer;" onclick="editTask('${task.id}')">✏️</span>
+              ${task.title}
+              <span style="color:${colorText}">(${task.priority})</span>
+              (${label})
+
+            </span>
             <br>
           `;
 
-          count++;
+          if (task.status !== "completed") count++;
         });
     });
 
@@ -214,7 +219,7 @@ async function loadTasks() {
   });
 }
 
-// Complete + Recurring
+// Complete Task
 window.completeTask = async function (id) {
 
   const snapshot = await getDocs(collection(db, "tasks"));
@@ -228,27 +233,33 @@ window.completeTask = async function (id) {
     status: "completed"
   });
 
-  if (currentTask.repeat && currentTask.repeat !== "none") {
-
-    let nextDate = new Date(currentTask.dueDate.toDate());
-
-    if (currentTask.repeat === "daily") nextDate.setDate(nextDate.getDate() + 1);
-    else if (currentTask.repeat === "weekly") nextDate.setDate(nextDate.getDate() + 7);
-    else nextDate.setDate(nextDate.getDate() + parseInt(currentTask.repeat));
-
-    await addDoc(collection(db, "tasks"), {
-      department: currentTask.department,
-      assignedTo: currentTask.assignedTo,
-      title: currentTask.title,
-      priority: currentTask.priority,
-      repeat: currentTask.repeat,
-      dueDate: nextDate,
-      status: "pending",
-      createdAt: new Date()
-    });
-  }
-
   loadTasks();
+
+  setTimeout(async () => {
+
+    if (currentTask.repeat && currentTask.repeat !== "none") {
+
+      let nextDate = new Date(currentTask.dueDate.toDate());
+
+      if (currentTask.repeat === "daily") nextDate.setDate(nextDate.getDate() + 1);
+      else if (currentTask.repeat === "weekly") nextDate.setDate(nextDate.getDate() + 7);
+      else nextDate.setDate(nextDate.getDate() + parseInt(currentTask.repeat));
+
+      await addDoc(collection(db, "tasks"), {
+        department: currentTask.department,
+        assignedTo: currentTask.assignedTo,
+        title: currentTask.title,
+        priority: currentTask.priority,
+        repeat: currentTask.repeat,
+        dueDate: nextDate,
+        status: "pending",
+        createdAt: new Date()
+      });
+    }
+
+    loadTasks();
+
+  }, 1500);
 };
 
 loadTasks();
