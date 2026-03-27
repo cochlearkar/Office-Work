@@ -11,13 +11,13 @@ window.addTask = async function () {
   const employee = document.getElementById("employee").value;
   const days = parseInt(document.getElementById("days").value);
 
-if (!days || days <= 0) {
-  alert("Please enter valid deadline days");
-  return;
-}
+  if (!task || !employee || !days || days <= 0) {
+    alert("Please fill all fields correctly");
+    return;
+  }
 
   const dueDate = new Date();
-dueDate.setDate(dueDate.getDate() + days);
+  dueDate.setDate(dueDate.getDate() + days);
 
   await addDoc(collection(db, "tasks"), {
     title: task,
@@ -39,21 +39,53 @@ async function loadTasks() {
 
   snapshot.forEach(docSnap => {
     const data = docSnap.data();
+
+    // Only show pending
+    if (data.status === "completed") return;
+
     if (!grouped[data.assignedTo]) grouped[data.assignedTo] = [];
     grouped[data.assignedTo].push({ id: docSnap.id, ...data });
   });
 
   Object.keys(grouped).forEach(emp => {
+    const tasks = grouped[emp];
+
+    let overdue = 0;
+    let oldest = 0;
+
+    tasks.forEach(t => {
+      if (t.dueDate && t.dueDate.toDate) {
+        const delay = Math.floor((new Date() - t.dueDate.toDate()) / (1000*60*60*24));
+        if (delay > 0) {
+          overdue++;
+          if (delay > oldest) oldest = delay;
+        }
+      }
+    });
+
+    // Workload color logic
+    let colorClass = "green";
+    if (tasks.length > 5) colorClass = "red";
+    else if (tasks.length > 2) colorClass = "yellow";
+
     const card = document.createElement("div");
-    card.className = "card";
+    card.className = "card " + colorClass;
 
-    let content = `<div class="employee">${emp}</div>`;
+    let content = `
+      <div class="employee">${emp}</div>
+      <div class="summary">
+        Pending: ${tasks.length} | Overdue: ${overdue} | Oldest: ${oldest} days
+      </div>
+    `;
 
-    grouped[emp].forEach(task => {
-      const delay = Math.floor((new Date() - task.dueDate.toDate()) / (1000*60*60*24));
+    tasks.forEach(task => {
+      let delay = 0;
+      if (task.dueDate && task.dueDate.toDate) {
+        delay = Math.floor((new Date() - task.dueDate.toDate()) / (1000*60*60*24));
+      }
 
       content += `
-        <div class="task ${task.priority}">
+        <div class="task">
           ${task.title} (${task.priority})<br>
           Delay: ${delay > 0 ? delay + " days" : "On time"}<br>
           <button onclick="completeTask('${task.id}')">Done</button>
