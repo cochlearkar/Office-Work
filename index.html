@@ -8,7 +8,7 @@
 
     button { margin: 5px; padding: 6px 10px; }
 
-    input, select { margin: 5px; padding: 6px; }
+    input { margin: 5px; padding: 6px; }
 
     .card {
       border-radius: 10px;
@@ -24,10 +24,18 @@
 
     .section { margin-top: 5px; font-weight: bold; }
 
-    .p1 { color: red; font-weight: bold; }
-    .p2 { color: orange; font-weight: bold; }
-    .p3 { color: blue; font-weight: bold; }
-    .p4 { color: gray; }
+    /* Flag styles */
+    .flag {
+      cursor: pointer;
+      font-size: 18px;
+      margin: 3px;
+      padding: 3px 6px;
+      border-radius: 5px;
+    }
+
+    .selected {
+      border: 2px solid black;
+    }
 
   </style>
 </head>
@@ -47,12 +55,18 @@
 
 <input id="task" placeholder="Enter Task">
 
-<select id="priority">
-  <option value="p1">P1 (Red Flag)</option>
-  <option value="p2">P2 (Orange Flag)</option>
-  <option value="p3">P3 (Blue Flag)</option>
-  <option value="p4">P4 (Low)</option>
-</select>
+<br>
+
+<!-- Flag selection -->
+<div>
+  <b>Select Priority:</b><br>
+  <span class="flag" id="p1" onclick="selectPriority('p1')">🚩</span>
+  <span class="flag" id="p2" onclick="selectPriority('p2')">🟧</span>
+  <span class="flag" id="p3" onclick="selectPriority('p3')">🔵</span>
+  <span class="flag" id="p4" onclick="selectPriority('p4')">⚪</span>
+</div>
+
+<br>
 
 <select id="repeat">
   <option value="none">No Repeat</option>
