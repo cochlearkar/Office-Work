@@ -90,7 +90,7 @@ window.addTask = async function () {
   loadTasks();
 };
 
-// Edit Task (FIXED)
+// Edit Task
 window.editTask = async function (id) {
 
   const snapshot = await getDocs(collection(db, "tasks"));
@@ -170,32 +170,43 @@ async function loadTasks() {
 
       let count = 1;
 
-      grouped[emp][dept].forEach(task => {
+      // 🔥 SORTING LOGIC
+      grouped[emp][dept]
+        .sort((a, b) => {
+          const dateA = a.dueDate.toDate();
+          const dateB = b.dueDate.toDate();
 
-        const due = task.dueDate.toDate();
-        const diff = Math.ceil((due - new Date()) / (1000*60*60*24));
+          if (dateA - dateB !== 0) return dateA - dateB;
 
-        let label = "Today";
-        if (diff === 1) label = "Tomorrow";
-        else if (diff > 1) label = "In " + diff + " days";
+          const priorityOrder = { high: 1, medium: 2, low: 3 };
+          return priorityOrder[a.priority] - priorityOrder[b.priority];
+        })
+        .forEach(task => {
 
-        let colorText = task.priority === "high" ? "red" :
-                        task.priority === "medium" ? "orange" : "green";
+          const due = task.dueDate.toDate();
+          const diff = Math.ceil((due - new Date()) / (1000*60*60*24));
 
-        content += `
-          ${count}.
-          <input type="checkbox" onchange="completeTask('${task.id}')">
+          let label = "Today";
+          if (diff === 1) label = "Tomorrow";
+          else if (diff > 1) label = "In " + diff + " days";
 
-          ${task.title}
-          <span style="color:${colorText}">(${task.priority})</span>
-          (${label})
+          let colorText = task.priority === "high" ? "red" :
+                          task.priority === "medium" ? "orange" : "green";
 
-          <span style="cursor:pointer;" onclick="editTask('${task.id}')">✏️</span>
-          <br>
-        `;
+          content += `
+            ${count}.
+            <input type="checkbox" onchange="completeTask('${task.id}')">
 
-        count++;
-      });
+            ${task.title}
+            <span style="color:${colorText}">(${task.priority})</span>
+            (${label})
+
+            <span style="cursor:pointer;" onclick="editTask('${task.id}')">✏️</span>
+            <br>
+          `;
+
+          count++;
+        });
     });
 
     card.innerHTML = content;
@@ -203,7 +214,7 @@ async function loadTasks() {
   });
 }
 
-// Complete Task + Recurring
+// Complete + Recurring
 window.completeTask = async function (id) {
 
   const snapshot = await getDocs(collection(db, "tasks"));
