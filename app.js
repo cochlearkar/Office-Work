@@ -114,13 +114,13 @@ window.editTask = function (task) {
   mainBtn.innerText = "Update Task";
 };
 
-// Clear
+// Clear form
 function clearForm() {
   document.getElementById("task").value = "";
   document.getElementById("days").value = "";
 }
 
-// Load Tasks (EMPLOYEE → DEPARTMENT)
+// Load Tasks
 async function loadTasks() {
   dashboard.innerHTML = "";
   const snapshot = await getDocs(collection(db, "tasks"));
@@ -139,6 +139,7 @@ async function loadTasks() {
   });
 
   Object.keys(grouped).forEach(emp => {
+
     let allTasks = Object.values(grouped[emp]).flat();
 
     // Workload color
@@ -152,9 +153,13 @@ async function loadTasks() {
     let content = `<div class="employee">${emp}</div>`;
 
     Object.keys(grouped[emp]).forEach(dept => {
+
       content += `<b>${dept.toUpperCase()}</b><br>`;
 
+      let count = 1;
+
       grouped[emp][dept].forEach(task => {
+
         const due = task.dueDate.toDate();
         const diff = Math.ceil((due - new Date()) / (1000*60*60*24));
 
@@ -166,13 +171,18 @@ async function loadTasks() {
                         task.priority === "medium" ? "orange" : "green";
 
         content += `
+          ${count}. 
+          <input type="checkbox" onchange="completeTask('${task.id}')">
+
           ${task.title}
           <span style="color:${colorText}">(${task.priority})</span>
           (${label})
 
-          <button onclick='editTask(${JSON.stringify(task)})'>Edit</button>
-          <button onclick="completeTask('${task.id}')">Done</button><br>
+          <span style="cursor:pointer;" onclick='editTask(${JSON.stringify(task)})'>✏️</span>
+          <br>
         `;
+
+        count++;
       });
     });
 
@@ -181,7 +191,7 @@ async function loadTasks() {
   });
 }
 
-// Complete + Recurring
+// Complete Task
 window.completeTask = async function (id) {
 
   const snapshot = await getDocs(collection(db, "tasks"));
@@ -195,7 +205,7 @@ window.completeTask = async function (id) {
     status: "completed"
   });
 
-  // Recurring logic
+  // Recurring
   if (currentTask.repeat && currentTask.repeat !== "none") {
 
     let nextDate = new Date(currentTask.dueDate.toDate());
