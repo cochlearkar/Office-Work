@@ -4,9 +4,15 @@ body {
   padding: 20px;
 }
 
-.form input, .form select {
+.form select, .form input {
   margin: 5px;
   padding: 8px;
+}
+
+.department {
+  margin-top: 20px;
+  font-size: 20px;
+  font-weight: bold;
 }
 
 .card {
@@ -14,7 +20,6 @@ body {
   padding: 15px;
   margin: 10px 0;
   border-radius: 10px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
 .green { border-left: 6px solid green; }
@@ -23,8 +28,6 @@ body {
 
 .employee {
   font-weight: bold;
-  margin-bottom: 10px;
-  font-size: 18px;
 }
 
 .summary {
