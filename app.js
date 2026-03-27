@@ -3,7 +3,7 @@ import {
   collection, addDoc, getDocs, updateDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Department mapping
+// Department → Employees mapping
 const employeesMap = {
   child: ["Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"],
   oral: ["Dr Harshitha", "Nethra"],
@@ -12,8 +12,11 @@ const employeesMap = {
 
 const dashboard = document.getElementById("dashboard");
 
-// 🔥 Ensure function is available globally
-window.loadEmployees = function () {
+// ✅ Attach event listener properly (fix for your error)
+document.getElementById("department").addEventListener("change", loadEmployees);
+
+// Load employees based on department
+function loadEmployees() {
   const dept = document.getElementById("department").value;
   const empSelect = document.getElementById("employee");
 
@@ -29,7 +32,7 @@ window.loadEmployees = function () {
     option.textContent = emp;
     empSelect.appendChild(option);
   });
-};
+}
 
 // Add Task
 window.addTask = async function () {
@@ -39,8 +42,8 @@ window.addTask = async function () {
   const priority = document.getElementById("priority").value;
   const days = parseInt(document.getElementById("days").value);
 
-  if (!department || !employee || !task || !days) {
-    alert("Fill all fields");
+  if (!department || !employee || !task || !days || days <= 0) {
+    alert("Please fill all fields correctly");
     return;
   }
 
@@ -60,7 +63,7 @@ window.addTask = async function () {
   loadTasks();
 };
 
-// Load Tasks
+// Load Tasks (Department → Employee grouping)
 async function loadTasks() {
   dashboard.innerHTML = "";
   const snapshot = await getDocs(collection(db, "tasks"));
@@ -69,6 +72,8 @@ async function loadTasks() {
 
   snapshot.forEach(docSnap => {
     const data = docSnap.data();
+
+    // Only show pending
     if (data.status === "completed") return;
 
     if (!grouped[data.department]) grouped[data.department] = {};
@@ -79,6 +84,7 @@ async function loadTasks() {
   });
 
   Object.keys(grouped).forEach(dept => {
+    // Department title
     const deptDiv = document.createElement("div");
     deptDiv.className = "department";
     deptDiv.innerHTML = dept.toUpperCase();
@@ -88,11 +94,21 @@ async function loadTasks() {
       const tasks = grouped[dept][emp];
 
       let overdue = 0;
+      let oldest = 0;
+
       tasks.forEach(t => {
-        const d = Math.floor((new Date() - t.dueDate.toDate())/(1000*60*60*24));
-        if (d > 0) overdue++;
+        if (t.dueDate && t.dueDate.toDate) {
+          const delay = Math.floor(
+            (new Date() - t.dueDate.toDate()) / (1000 * 60 * 60 * 24)
+          );
+          if (delay > 0) {
+            overdue++;
+            if (delay > oldest) oldest = delay;
+          }
+        }
       });
 
+      // Workload color logic
       let color = "green";
       if (tasks.length > 5) color = "red";
       else if (tasks.length > 2) color = "yellow";
@@ -103,12 +119,18 @@ async function loadTasks() {
       let content = `
         <div class="employee">${emp}</div>
         <div class="summary">
-          Pending: ${tasks.length} | Overdue: ${overdue}
+          Pending: ${tasks.length} | Overdue: ${overdue} | Oldest: ${oldest} days
         </div>
       `;
 
       tasks.forEach(task => {
-        const delay = Math.floor((new Date() - task.dueDate.toDate())/(1000*60*60*24));
+        let delay = 0;
+
+        if (task.dueDate && task.dueDate.toDate) {
+          delay = Math.floor(
+            (new Date() - task.dueDate.toDate()) / (1000 * 60 * 60 * 24)
+          );
+        }
 
         content += `
           <div class="task">
@@ -125,12 +147,13 @@ async function loadTasks() {
   });
 }
 
-// Complete
-window.completeTask = async function(id) {
+// Complete Task
+window.completeTask = async function (id) {
   await updateDoc(doc(db, "tasks", id), {
     status: "completed"
   });
   loadTasks();
 };
 
+// Initial load
 loadTasks();
