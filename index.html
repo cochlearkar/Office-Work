@@ -6,18 +6,35 @@
 </head>
 <body>
 
-<h2>Team Task Dashboard</h2>
+<h2>Department Task Dashboard</h2>
 
 <div class="form">
+
+  <!-- Department -->
+  <select id="department" onchange="loadEmployees()">
+    <option value="">Select Department</option>
+    <option value="child">Child Health</option>
+    <option value="oral">Oral Health</option>
+    <option value="ci">Cochlear Implant</option>
+  </select>
+
+  <!-- Employee -->
+  <select id="employee">
+    <option value="">Select Employee</option>
+  </select>
+
   <input id="task" placeholder="Task" />
+
   <select id="priority">
     <option value="high">High</option>
     <option value="medium">Medium</option>
     <option value="low">Low</option>
   </select>
-  <input id="employee" placeholder="Employee Name" />
+
   <input id="days" type="number" placeholder="Deadline (days)" />
+
   <button onclick="addTask()">Add Task</button>
+
 </div>
 
 <div id="dashboard"></div>
