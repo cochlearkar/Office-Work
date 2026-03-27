@@ -59,7 +59,7 @@ window.addTask = async function () {
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + days);
 
-  if (editMode) {
+  if (editMode && editId) {
     await updateDoc(doc(db, "tasks", editId), {
       department: selectedDept,
       assignedTo: selectedEmployee,
@@ -90,8 +90,20 @@ window.addTask = async function () {
   loadTasks();
 };
 
-// Edit Task
-window.editTask = function (task) {
+// Edit Task (FIXED)
+window.editTask = async function (id) {
+
+  const snapshot = await getDocs(collection(db, "tasks"));
+  let task;
+
+  snapshot.forEach(docSnap => {
+    if (docSnap.id === id) {
+      task = { id: docSnap.id, ...docSnap.data() };
+    }
+  });
+
+  if (!task) return;
+
   selectedDept = task.department;
   selectedEmployee = task.assignedTo;
 
@@ -110,7 +122,8 @@ window.editTask = function (task) {
   document.getElementById("days").value = diff > 0 ? diff : 1;
 
   editMode = true;
-  editId = task.id;
+  editId = id;
+
   mainBtn.innerText = "Update Task";
 };
 
@@ -142,7 +155,6 @@ async function loadTasks() {
 
     let allTasks = Object.values(grouped[emp]).flat();
 
-    // Workload color
     let color = "green";
     if (allTasks.length > 5) color = "red";
     else if (allTasks.length > 2) color = "yellow";
@@ -171,14 +183,14 @@ async function loadTasks() {
                         task.priority === "medium" ? "orange" : "green";
 
         content += `
-          ${count}. 
+          ${count}.
           <input type="checkbox" onchange="completeTask('${task.id}')">
 
           ${task.title}
           <span style="color:${colorText}">(${task.priority})</span>
           (${label})
 
-          <span style="cursor:pointer;" onclick='editTask(${JSON.stringify(task)})'>✏️</span>
+          <span style="cursor:pointer;" onclick="editTask('${task.id}')">✏️</span>
           <br>
         `;
 
@@ -191,7 +203,7 @@ async function loadTasks() {
   });
 }
 
-// Complete Task
+// Complete Task + Recurring
 window.completeTask = async function (id) {
 
   const snapshot = await getDocs(collection(db, "tasks"));
@@ -205,7 +217,6 @@ window.completeTask = async function (id) {
     status: "completed"
   });
 
-  // Recurring
   if (currentTask.repeat && currentTask.repeat !== "none") {
 
     let nextDate = new Date(currentTask.dueDate.toDate());
@@ -215,7 +226,11 @@ window.completeTask = async function (id) {
     else nextDate.setDate(nextDate.getDate() + parseInt(currentTask.repeat));
 
     await addDoc(collection(db, "tasks"), {
-      ...currentTask,
+      department: currentTask.department,
+      assignedTo: currentTask.assignedTo,
+      title: currentTask.title,
+      priority: currentTask.priority,
+      repeat: currentTask.repeat,
       dueDate: nextDate,
       status: "pending",
       createdAt: new Date()
