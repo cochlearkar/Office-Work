@@ -3,46 +3,56 @@ import {
   collection, addDoc, getDocs, updateDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+// Departments
 const employeesMap = {
   child: ["Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"],
   oral: ["Dr Harshitha", "Nethra"],
   ci: ["Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"]
 };
 
-const dashboard = document.getElementById("dashboard");
-
+let selectedDept = "";
+let selectedEmployee = "";
 let editMode = false;
 let editId = null;
 
-// Load employees
-document.getElementById("department").addEventListener("change", loadEmployees);
+const dashboard = document.getElementById("dashboard");
+const empDiv = document.getElementById("employees");
+const mainBtn = document.getElementById("mainBtn");
 
-function loadEmployees() {
-  const dept = document.getElementById("department").value;
-  const empSelect = document.getElementById("employee");
+// Select Department
+window.selectDepartment = function (dept) {
+  selectedDept = dept;
+  selectedEmployee = "";
 
-  empSelect.innerHTML = '<option value="">Select Employee</option>';
-
-  if (!dept) return;
+  empDiv.innerHTML = "<b>Select Employee:</b><br>";
 
   employeesMap[dept].forEach(emp => {
-    const option = document.createElement("option");
-    option.value = emp;
-    option.textContent = emp;
-    empSelect.appendChild(option);
+    const btn = document.createElement("button");
+    btn.innerText = emp;
+    btn.onclick = () => {
+      selectedEmployee = emp;
+      highlightEmployee(emp);
+    };
+    empDiv.appendChild(btn);
+  });
+};
+
+// Highlight selected employee
+function highlightEmployee(emp) {
+  const buttons = empDiv.querySelectorAll("button");
+  buttons.forEach(btn => {
+    btn.style.background = btn.innerText === emp ? "lightgreen" : "";
   });
 }
 
-// Add or Update Task
+// Add / Update Task
 window.addTask = async function () {
-  const department = document.getElementById("department").value;
-  const employee = document.getElementById("employee").value;
   const task = document.getElementById("task").value;
   const priority = document.getElementById("priority").value;
   const days = parseInt(document.getElementById("days").value);
 
-  if (!department || !employee || !task || !days) {
-    alert("Fill all fields");
+  if (!selectedDept || !selectedEmployee || !task || !days) {
+    alert("Select department, employee and fill all fields");
     return;
   }
 
@@ -50,10 +60,9 @@ window.addTask = async function () {
   dueDate.setDate(dueDate.getDate() + days);
 
   if (editMode) {
-    // UPDATE
     await updateDoc(doc(db, "tasks", editId), {
-      department,
-      assignedTo: employee,
+      department: selectedDept,
+      assignedTo: selectedEmployee,
       title: task,
       priority,
       dueDate
@@ -61,13 +70,12 @@ window.addTask = async function () {
 
     editMode = false;
     editId = null;
-    document.querySelector("button").innerText = "Add Task";
+    mainBtn.innerText = "Add Task";
 
   } else {
-    // ADD
     await addDoc(collection(db, "tasks"), {
-      department,
-      assignedTo: employee,
+      department: selectedDept,
+      assignedTo: selectedEmployee,
       title: task,
       priority,
       dueDate,
@@ -80,13 +88,15 @@ window.addTask = async function () {
   loadTasks();
 };
 
-// Fill form for editing
+// Edit Task
 window.editTask = function (task) {
-  document.getElementById("department").value = task.department;
-  loadEmployees();
+  selectedDept = task.department;
+  selectedEmployee = task.assignedTo;
+
+  selectDepartment(task.department);
 
   setTimeout(() => {
-    document.getElementById("employee").value = task.assignedTo;
+    highlightEmployee(task.assignedTo);
   }, 100);
 
   document.getElementById("task").value = task.title;
@@ -100,8 +110,7 @@ window.editTask = function (task) {
 
   editMode = true;
   editId = task.id;
-
-  document.querySelector("button").innerText = "Update Task";
+  mainBtn.innerText = "Update Task";
 };
 
 // Clear form
@@ -115,52 +124,27 @@ async function loadTasks() {
   dashboard.innerHTML = "";
   const snapshot = await getDocs(collection(db, "tasks"));
 
-  let grouped = {};
-
   snapshot.forEach(docSnap => {
-    const data = docSnap.data();
-    if (data.status === "completed") return;
+    const task = { id: docSnap.id, ...docSnap.data() };
+    if (task.status === "completed") return;
 
-    if (!grouped[data.department]) grouped[data.department] = {};
-    if (!grouped[data.department][data.assignedTo])
-      grouped[data.department][data.assignedTo] = [];
+    const card = document.createElement("div");
+    card.className = "card";
 
-    grouped[data.department][data.assignedTo].push({ id: docSnap.id, ...data });
-  });
+    const delay = Math.floor(
+      (new Date() - task.dueDate.toDate()) / (1000 * 60 * 60 * 24)
+    );
 
-  Object.keys(grouped).forEach(dept => {
-    const deptDiv = document.createElement("div");
-    deptDiv.className = "department";
-    deptDiv.innerHTML = dept.toUpperCase();
-    dashboard.appendChild(deptDiv);
+    card.innerHTML = `
+      <b>${task.department.toUpperCase()}</b> - ${task.assignedTo}<br>
+      ${task.title} (${task.priority})<br>
+      Delay: ${delay > 0 ? delay + " days" : "On time"}<br>
 
-    Object.keys(grouped[dept]).forEach(emp => {
-      const tasks = grouped[dept][emp];
+      <button onclick='editTask(${JSON.stringify(task)})'>Edit</button>
+      <button onclick="completeTask('${task.id}')">Done</button>
+    `;
 
-      const card = document.createElement("div");
-      card.className = "card";
-
-      let content = `<div class="employee">${emp}</div>`;
-
-      tasks.forEach(task => {
-        const delay = Math.floor(
-          (new Date() - task.dueDate.toDate()) / (1000 * 60 * 60 * 24)
-        );
-
-        content += `
-          <div class="task">
-            ${task.title} (${task.priority})<br>
-            Delay: ${delay > 0 ? delay + " days" : "On time"}<br>
-
-            <button onclick='editTask(${JSON.stringify(task)})'>Edit</button>
-            <button onclick="completeTask('${task.id}')">Done</button>
-          </div>
-        `;
-      });
-
-      card.innerHTML = content;
-      dashboard.appendChild(card);
-    });
+    dashboard.appendChild(card);
   });
 }
 
