@@ -170,11 +170,22 @@ async function loadTasks() {
 
       grouped[emp][dept]
         .sort((a, b) => {
-          const dateA = a.dueDate.toDate();
-          const dateB = b.dueDate.toDate();
 
-          if (dateA - dateB !== 0) return dateA - dateB;
+          const today = new Date();
+          const d1 = a.dueDate.toDate();
+          const d2 = b.dueDate.toDate();
 
+          const diff1 = Math.ceil((d1 - today) / (1000*60*60*24));
+          const diff2 = Math.ceil((d2 - today) / (1000*60*60*24));
+
+          // Overdue first
+          if (diff1 < 0 && diff2 >= 0) return -1;
+          if (diff2 < 0 && diff1 >= 0) return 1;
+
+          // Then by days
+          if (diff1 !== diff2) return diff1 - diff2;
+
+          // Then by priority
           const priorityOrder = { high: 1, medium: 2, low: 3 };
           return priorityOrder[a.priority] - priorityOrder[b.priority];
         })
@@ -184,7 +195,8 @@ async function loadTasks() {
           const diff = Math.ceil((due - new Date()) / (1000*60*60*24));
 
           let label = "Today";
-          if (diff === 1) label = "Tomorrow";
+          if (diff < 0) label = "Overdue";
+          else if (diff === 1) label = "Tomorrow";
           else if (diff > 1) label = "In " + diff + " days";
 
           let colorText = task.priority === "high" ? "red" :
@@ -200,7 +212,7 @@ async function loadTasks() {
               ${count}.
               <input type="checkbox"
                 ${task.status === "completed" ? "checked" : ""}
-                onchange="completeTask('${task.id}')">
+                onchange="toggleTask('${task.id}', this.checked)">
 
               ${task.title}
               <span style="color:${colorText}">(${task.priority})</span>
@@ -219,47 +231,52 @@ async function loadTasks() {
   });
 }
 
-// Complete Task
-window.completeTask = async function (id) {
+// Toggle Task (FIXED)
+window.toggleTask = async function (id, checked) {
 
-  const snapshot = await getDocs(collection(db, "tasks"));
-  let currentTask;
-
-  snapshot.forEach(d => {
-    if (d.id === id) currentTask = { id: d.id, ...d.data() };
-  });
-
-  await updateDoc(doc(db, "tasks", id), {
-    status: "completed"
-  });
-
-  loadTasks();
-
-  setTimeout(async () => {
-
-    if (currentTask.repeat && currentTask.repeat !== "none") {
-
-      let nextDate = new Date(currentTask.dueDate.toDate());
-
-      if (currentTask.repeat === "daily") nextDate.setDate(nextDate.getDate() + 1);
-      else if (currentTask.repeat === "weekly") nextDate.setDate(nextDate.getDate() + 7);
-      else nextDate.setDate(nextDate.getDate() + parseInt(currentTask.repeat));
-
-      await addDoc(collection(db, "tasks"), {
-        department: currentTask.department,
-        assignedTo: currentTask.assignedTo,
-        title: currentTask.title,
-        priority: currentTask.priority,
-        repeat: currentTask.repeat,
-        dueDate: nextDate,
-        status: "pending",
-        createdAt: new Date()
-      });
-    }
+  if (checked) {
+    await updateDoc(doc(db, "tasks", id), { status: "completed" });
 
     loadTasks();
 
-  }, 1500);
+    setTimeout(async () => {
+      const snapshot = await getDocs(collection(db, "tasks"));
+      let task;
+
+      snapshot.forEach(d => {
+        if (d.id === id) task = { id: d.id, ...d.data() };
+      });
+
+      if (!task || task.status !== "completed") return;
+
+      if (task.repeat && task.repeat !== "none") {
+
+        let nextDate = new Date(task.dueDate.toDate());
+
+        if (task.repeat === "daily") nextDate.setDate(nextDate.getDate() + 1);
+        else if (task.repeat === "weekly") nextDate.setDate(nextDate.getDate() + 7);
+        else nextDate.setDate(nextDate.getDate() + parseInt(task.repeat));
+
+        await addDoc(collection(db, "tasks"), {
+          department: task.department,
+          assignedTo: task.assignedTo,
+          title: task.title,
+          priority: task.priority,
+          repeat: task.repeat,
+          dueDate: nextDate,
+          status: "pending",
+          createdAt: new Date()
+        });
+      }
+
+      loadTasks();
+
+    }, 1500);
+
+  } else {
+    await updateDoc(doc(db, "tasks", id), { status: "pending" });
+    loadTasks();
+  }
 };
 
 loadTasks();
