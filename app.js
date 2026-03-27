@@ -9,7 +9,12 @@ window.addTask = async function () {
   const task = document.getElementById("task").value;
   const priority = document.getElementById("priority").value;
   const employee = document.getElementById("employee").value;
-  const days = document.getElementById("days").value;
+  const days = parseInt(document.getElementById("days").value);
+
+if (!days || days <= 0) {
+  alert("Please enter valid deadline days");
+  return;
+}
 
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + parseInt(days));
