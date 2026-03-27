@@ -8,21 +8,18 @@
 
 <h2>Department Task Dashboard</h2>
 
+<!-- Departments -->
+<div>
+  <button onclick="selectDepartment('child')">Child Health</button>
+  <button onclick="selectDepartment('oral')">Oral Health</button>
+  <button onclick="selectDepartment('ci')">Cochlear Implant</button>
+</div>
+
+<!-- Employees -->
+<div id="employees"></div>
+
+<!-- Form -->
 <div class="form">
-
-  <!-- Department -->
-  <select id="department" id="department">
-    <option value="">Select Department</option>
-    <option value="child">Child Health</option>
-    <option value="oral">Oral Health</option>
-    <option value="ci">Cochlear Implant</option>
-  </select>
-
-  <!-- Employee -->
-  <select id="employee">
-    <option value="">Select Employee</option>
-  </select>
-
   <input id="task" placeholder="Task" />
 
   <select id="priority">
@@ -33,8 +30,7 @@
 
   <input id="days" type="number" placeholder="Deadline (days)" />
 
-  <button onclick="addTask()">Add Task</button>
-
+  <button id="mainBtn" onclick="addTask()">Add Task</button>
 </div>
 
 <div id="dashboard"></div>
