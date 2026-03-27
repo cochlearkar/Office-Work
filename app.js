@@ -11,6 +11,9 @@ const employeesMap = {
 
 const dashboard = document.getElementById("dashboard");
 
+let editMode = false;
+let editId = null;
+
 // Load employees
 document.getElementById("department").addEventListener("change", loadEmployees);
 
@@ -30,7 +33,7 @@ function loadEmployees() {
   });
 }
 
-// Add Task
+// Add or Update Task
 window.addTask = async function () {
   const department = document.getElementById("department").value;
   const employee = document.getElementById("employee").value;
@@ -46,41 +49,66 @@ window.addTask = async function () {
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + days);
 
-  await addDoc(collection(db, "tasks"), {
-    department,
-    assignedTo: employee,
-    title: task,
-    priority,
-    dueDate,
-    status: "pending",
-    createdAt: new Date()
-  });
+  if (editMode) {
+    // UPDATE
+    await updateDoc(doc(db, "tasks", editId), {
+      department,
+      assignedTo: employee,
+      title: task,
+      priority,
+      dueDate
+    });
 
+    editMode = false;
+    editId = null;
+    document.querySelector("button").innerText = "Add Task";
+
+  } else {
+    // ADD
+    await addDoc(collection(db, "tasks"), {
+      department,
+      assignedTo: employee,
+      title: task,
+      priority,
+      dueDate,
+      status: "pending",
+      createdAt: new Date()
+    });
+  }
+
+  clearForm();
   loadTasks();
 };
 
-// ✏️ EDIT FUNCTION
-window.editTask = async function (id, oldTitle, oldPriority) {
-  const newTitle = prompt("Edit Task", oldTitle);
-  if (!newTitle) return;
+// Fill form for editing
+window.editTask = function (task) {
+  document.getElementById("department").value = task.department;
+  loadEmployees();
 
-  const newPriority = prompt("Edit Priority (high/medium/low)", oldPriority);
-  if (!newPriority) return;
+  setTimeout(() => {
+    document.getElementById("employee").value = task.assignedTo;
+  }, 100);
 
-  const newDays = prompt("Enter new deadline (days)");
-  if (!newDays) return;
+  document.getElementById("task").value = task.title;
+  document.getElementById("priority").value = task.priority;
 
-  const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + parseInt(newDays));
+  const today = new Date();
+  const due = task.dueDate.toDate();
+  const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
 
-  await updateDoc(doc(db, "tasks", id), {
-    title: newTitle,
-    priority: newPriority,
-    dueDate
-  });
+  document.getElementById("days").value = diff > 0 ? diff : 1;
 
-  loadTasks();
+  editMode = true;
+  editId = task.id;
+
+  document.querySelector("button").innerText = "Update Task";
 };
+
+// Clear form
+function clearForm() {
+  document.getElementById("task").value = "";
+  document.getElementById("days").value = "";
+}
 
 // Load Tasks
 async function loadTasks() {
@@ -124,8 +152,8 @@ async function loadTasks() {
             ${task.title} (${task.priority})<br>
             Delay: ${delay > 0 ? delay + " days" : "On time"}<br>
 
+            <button onclick='editTask(${JSON.stringify(task)})'>Edit</button>
             <button onclick="completeTask('${task.id}')">Done</button>
-            <button onclick="editTask('${task.id}', '${task.title}', '${task.priority}')">Edit</button>
           </div>
         `;
       });
