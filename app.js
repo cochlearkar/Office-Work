@@ -18,7 +18,7 @@ const dashboard = document.getElementById("dashboard");
 const empDiv = document.getElementById("employees");
 const mainBtn = document.getElementById("mainBtn");
 
-// Department selection
+// Select Department
 window.selectDepartment = function (dept) {
   selectedDept = dept;
   selectedEmployee = "";
@@ -36,7 +36,7 @@ window.selectDepartment = function (dept) {
   });
 };
 
-// Highlight
+// Highlight employee
 function highlightEmployee(emp) {
   const buttons = empDiv.querySelectorAll("button");
   buttons.forEach(btn => {
@@ -44,10 +44,11 @@ function highlightEmployee(emp) {
   });
 }
 
-// Add / Update
+// Add / Update Task
 window.addTask = async function () {
   const task = document.getElementById("task").value;
   const priority = document.getElementById("priority").value;
+  const repeat = document.getElementById("repeat").value;
   const days = parseInt(document.getElementById("days").value);
 
   if (!selectedDept || !selectedEmployee || !task || !days) {
@@ -64,6 +65,7 @@ window.addTask = async function () {
       assignedTo: selectedEmployee,
       title: task,
       priority,
+      repeat,
       dueDate
     });
 
@@ -77,6 +79,7 @@ window.addTask = async function () {
       assignedTo: selectedEmployee,
       title: task,
       priority,
+      repeat,
       dueDate,
       status: "pending",
       createdAt: new Date()
@@ -87,7 +90,7 @@ window.addTask = async function () {
   loadTasks();
 };
 
-// Edit
+// Edit Task
 window.editTask = function (task) {
   selectedDept = task.department;
   selectedEmployee = task.assignedTo;
@@ -98,6 +101,7 @@ window.editTask = function (task) {
 
   document.getElementById("task").value = task.title;
   document.getElementById("priority").value = task.priority;
+  document.getElementById("repeat").value = task.repeat || "none";
 
   const today = new Date();
   const due = task.dueDate.toDate();
@@ -116,24 +120,7 @@ function clearForm() {
   document.getElementById("days").value = "";
 }
 
-// Convert days to label
-function getDayLabel(dueDate) {
-  const today = new Date();
-  const diff = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
-
-  if (diff <= 0) return "Today";
-  if (diff === 1) return "Tomorrow";
-  return "In " + diff + " days";
-}
-
-// Priority color
-function getPriorityColor(priority) {
-  if (priority === "high") return "red";
-  if (priority === "medium") return "orange";
-  return "green";
-}
-
-// Load Tasks
+// Load Tasks (EMPLOYEE → DEPARTMENT)
 async function loadTasks() {
   dashboard.innerHTML = "";
   const snapshot = await getDocs(collection(db, "tasks"));
@@ -144,54 +131,87 @@ async function loadTasks() {
     const data = docSnap.data();
     if (data.status === "completed") return;
 
-    if (!grouped[data.department]) grouped[data.department] = {};
-    if (!grouped[data.department][data.assignedTo])
-      grouped[data.department][data.assignedTo] = [];
+    if (!grouped[data.assignedTo]) grouped[data.assignedTo] = {};
+    if (!grouped[data.assignedTo][data.department])
+      grouped[data.assignedTo][data.department] = [];
 
-    grouped[data.department][data.assignedTo].push({ id: docSnap.id, ...data });
+    grouped[data.assignedTo][data.department].push({ id: docSnap.id, ...data });
   });
 
-  Object.keys(grouped).forEach(dept => {
+  Object.keys(grouped).forEach(emp => {
+    let allTasks = Object.values(grouped[emp]).flat();
 
-    const deptTitle = document.createElement("div");
-    deptTitle.innerHTML = "<b>" + dept.toUpperCase() + "</b><br>";
-    dashboard.appendChild(deptTitle);
+    // Workload color
+    let color = "green";
+    if (allTasks.length > 5) color = "red";
+    else if (allTasks.length > 2) color = "yellow";
 
-    Object.keys(grouped[dept]).forEach(emp => {
+    const card = document.createElement("div");
+    card.className = "card " + color;
 
-      const empTitle = document.createElement("div");
-      empTitle.innerHTML = "<b>" + emp + "</b>";
-      dashboard.appendChild(empTitle);
+    let content = `<div class="employee">${emp}</div>`;
 
-      grouped[dept][emp].forEach(task => {
+    Object.keys(grouped[emp]).forEach(dept => {
+      content += `<b>${dept.toUpperCase()}</b><br>`;
+
+      grouped[emp][dept].forEach(task => {
         const due = task.dueDate.toDate();
-        const dayLabel = getDayLabel(due);
-        const color = getPriorityColor(task.priority);
+        const diff = Math.ceil((due - new Date()) / (1000*60*60*24));
 
-        const row = document.createElement("div");
+        let label = "Today";
+        if (diff === 1) label = "Tomorrow";
+        else if (diff > 1) label = "In " + diff + " days";
 
-        row.innerHTML = `
-          ${task.title} 
-          <span style="color:${color}">(${task.priority})</span> 
-          (${dayLabel})
-          
+        let colorText = task.priority === "high" ? "red" :
+                        task.priority === "medium" ? "orange" : "green";
+
+        content += `
+          ${task.title}
+          <span style="color:${colorText}">(${task.priority})</span>
+          (${label})
+
           <button onclick='editTask(${JSON.stringify(task)})'>Edit</button>
-          <button onclick="completeTask('${task.id}')">Done</button>
+          <button onclick="completeTask('${task.id}')">Done</button><br>
         `;
-
-        dashboard.appendChild(row);
       });
-
-      dashboard.appendChild(document.createElement("hr"));
     });
+
+    card.innerHTML = content;
+    dashboard.appendChild(card);
   });
 }
 
-// Complete
+// Complete + Recurring
 window.completeTask = async function (id) {
+
+  const snapshot = await getDocs(collection(db, "tasks"));
+  let currentTask;
+
+  snapshot.forEach(d => {
+    if (d.id === id) currentTask = { id: d.id, ...d.data() };
+  });
+
   await updateDoc(doc(db, "tasks", id), {
     status: "completed"
   });
+
+  // Recurring logic
+  if (currentTask.repeat && currentTask.repeat !== "none") {
+
+    let nextDate = new Date(currentTask.dueDate.toDate());
+
+    if (currentTask.repeat === "daily") nextDate.setDate(nextDate.getDate() + 1);
+    else if (currentTask.repeat === "weekly") nextDate.setDate(nextDate.getDate() + 7);
+    else nextDate.setDate(nextDate.getDate() + parseInt(currentTask.repeat));
+
+    await addDoc(collection(db, "tasks"), {
+      ...currentTask,
+      dueDate: nextDate,
+      status: "pending",
+      createdAt: new Date()
+    });
+  }
+
   loadTasks();
 };
 
