@@ -4,9 +4,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const employeesMap = {
-  child: ["Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"],
-  oral: ["Dr Harshitha", "Nethra"],
-  ci: ["Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"]
+  child: ["Dr Basavaraj", "Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"],
+  oral: ["Dr Basavaraj", "Dr Harshitha", "Nethra"],
+  ci: ["Dr Basavaraj", "Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"]
 };
 
 let selectedDept = "";
@@ -18,40 +18,27 @@ const dashboard = document.getElementById("dashboard");
 const empDiv = document.getElementById("employees");
 const mainBtn = document.getElementById("mainBtn");
 
-// Select Department
+// Department select
 window.selectDepartment = function (dept) {
   selectedDept = dept;
-  selectedEmployee = "";
-
-  empDiv.innerHTML = "<b>Select Employee:</b><br>";
+  empDiv.innerHTML = "";
 
   employeesMap[dept].forEach(emp => {
     const btn = document.createElement("button");
     btn.innerText = emp;
-    btn.onclick = () => {
-      selectedEmployee = emp;
-      highlightEmployee(emp);
-    };
+    btn.onclick = () => selectedEmployee = emp;
     empDiv.appendChild(btn);
   });
 };
 
-// Highlight employee
-function highlightEmployee(emp) {
-  const buttons = empDiv.querySelectorAll("button");
-  buttons.forEach(btn => {
-    btn.style.background = btn.innerText === emp ? "lightgreen" : "";
-  });
-}
-
-// Add / Update Task
+// Add / Update
 window.addTask = async function () {
   const task = document.getElementById("task").value;
   const priority = document.getElementById("priority").value;
   const repeat = document.getElementById("repeat").value;
   const days = parseInt(document.getElementById("days").value);
 
-  if (!selectedDept || !selectedEmployee || !task || !days) {
+  if (!task || !selectedDept || !selectedEmployee) {
     alert("Fill all fields");
     return;
   }
@@ -61,75 +48,51 @@ window.addTask = async function () {
 
   if (editMode && editId) {
     await updateDoc(doc(db, "tasks", editId), {
-      department: selectedDept,
-      assignedTo: selectedEmployee,
-      title: task,
-      priority,
-      repeat,
-      dueDate
+      title: task, priority, repeat, dueDate,
+      department: selectedDept, assignedTo: selectedEmployee
     });
-
     editMode = false;
     editId = null;
     mainBtn.innerText = "Add Task";
-
   } else {
     await addDoc(collection(db, "tasks"), {
-      department: selectedDept,
-      assignedTo: selectedEmployee,
       title: task,
       priority,
       repeat,
       dueDate,
-      status: "pending",
-      createdAt: new Date()
+      department: selectedDept,
+      assignedTo: selectedEmployee,
+      status: "pending"
     });
   }
 
-  clearForm();
+  document.getElementById("task").value = "";
   loadTasks();
 };
 
-// Edit Task
+// Edit
 window.editTask = async function (id) {
-
   const snapshot = await getDocs(collection(db, "tasks"));
-  let task;
-
-  snapshot.forEach(docSnap => {
-    if (docSnap.id === id) {
-      task = { id: docSnap.id, ...docSnap.data() };
+  snapshot.forEach(d => {
+    if (d.id === id) {
+      const t = d.data();
+      document.getElementById("task").value = t.title;
+      document.getElementById("priority").value = t.priority;
+      editMode = true;
+      editId = id;
+      mainBtn.innerText = "Update Task";
     }
   });
-
-  if (!task) return;
-
-  selectedDept = task.department;
-  selectedEmployee = task.assignedTo;
-
-  selectDepartment(task.department);
-  setTimeout(() => highlightEmployee(task.assignedTo), 100);
-
-  document.getElementById("task").value = task.title;
-  document.getElementById("priority").value = task.priority;
-  document.getElementById("repeat").value = task.repeat || "none";
-
-  const today = new Date();
-  const due = task.dueDate.toDate();
-  const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
-
-  document.getElementById("days").value = diff > 0 ? diff : 1;
-
-  editMode = true;
-  editId = id;
-
-  mainBtn.innerText = "Update Task";
 };
 
-// Clear form
-function clearForm() {
-  document.getElementById("task").value = "";
-  document.getElementById("days").value = "";
+// Priority label
+function getPriorityLabel(p) {
+  return {
+    p1: `<span class="p1">P1</span>`,
+    p2: `<span class="p2">P2</span>`,
+    p3: `<span class="p3">P3</span>`,
+    p4: `<span class="p4">P4</span>`
+  }[p];
 }
 
 // Load Tasks
@@ -140,142 +103,107 @@ async function loadTasks() {
   let grouped = {};
 
   snapshot.forEach(docSnap => {
-    const data = docSnap.data();
-
-    if (!grouped[data.assignedTo]) grouped[data.assignedTo] = {};
-    if (!grouped[data.assignedTo][data.department])
-      grouped[data.assignedTo][data.department] = [];
-
-    grouped[data.assignedTo][data.department].push({ id: docSnap.id, ...data });
+    const d = docSnap.data();
+    if (!grouped[d.assignedTo]) grouped[d.assignedTo] = [];
+    grouped[d.assignedTo].push({ id: docSnap.id, ...d });
   });
 
   Object.keys(grouped).forEach(emp => {
 
-    let activeTasks = Object.values(grouped[emp]).flat().filter(t => t.status !== "completed");
+    let tasks = grouped[emp];
 
-    let color = "green";
-    if (activeTasks.length > 5) color = "red";
-    else if (activeTasks.length > 2) color = "yellow";
+    let active = tasks.filter(t => t.status !== "completed");
+
+    let color = active.length > 5 ? "red" : active.length > 2 ? "yellow" : "green";
 
     const card = document.createElement("div");
     card.className = "card " + color;
 
-    let content = `<div class="employee">${emp}</div>`;
+    let html = `<div class="employee">${emp}</div>`;
 
-    Object.keys(grouped[emp]).forEach(dept => {
+    const sections = {
+      overdue: [],
+      today: [],
+      tomorrow: [],
+      upcoming: []
+    };
 
-      content += `<b>${dept.toUpperCase()}</b><br>`;
+    tasks.forEach(t => {
+      const diff = Math.ceil((t.dueDate.toDate() - new Date())/(1000*60*60*24));
 
-      let count = 1;
+      if (diff < 0) sections.overdue.push(t);
+      else if (diff === 0) sections.today.push(t);
+      else if (diff === 1) sections.tomorrow.push(t);
+      else sections.upcoming.push(t);
+    });
 
-      grouped[emp][dept]
-        .sort((a, b) => {
+    const order = ["overdue", "today", "tomorrow", "upcoming"];
 
-          const today = new Date();
-          const d1 = a.dueDate.toDate();
-          const d2 = b.dueDate.toDate();
+    order.forEach(sec => {
 
-          const diff1 = Math.ceil((d1 - today) / (1000*60*60*24));
-          const diff2 = Math.ceil((d2 - today) / (1000*60*60*24));
+      if (sections[sec].length === 0) return;
 
-          // Overdue first
-          if (diff1 < 0 && diff2 >= 0) return -1;
-          if (diff2 < 0 && diff1 >= 0) return 1;
+      html += `<div class="section">${sec.toUpperCase()}</div>`;
 
-          // Then by days
-          if (diff1 !== diff2) return diff1 - diff2;
-
-          // Then by priority
-          const priorityOrder = { high: 1, medium: 2, low: 3 };
-          return priorityOrder[a.priority] - priorityOrder[b.priority];
+      sections[sec]
+        .sort((a,b)=>{
+          const pr = {p1:1,p2:2,p3:3,p4:4};
+          return pr[a.priority]-pr[b.priority];
         })
-        .forEach(task => {
+        .forEach((t,i)=>{
 
-          const due = task.dueDate.toDate();
-          const diff = Math.ceil((due - new Date()) / (1000*60*60*24));
+          const style = t.status==="completed" ? "text-decoration:line-through;opacity:0.6;" : "";
 
-          let label = "Today";
-          if (diff < 0) label = "Overdue";
-          else if (diff === 1) label = "Tomorrow";
-          else if (diff > 1) label = "In " + diff + " days";
-
-          let colorText = task.priority === "high" ? "red" :
-                          task.priority === "medium" ? "orange" : "green";
-
-          let style = task.status === "completed"
-            ? "text-decoration: line-through; opacity:0.6;"
-            : "";
-
-          content += `
-            <span style="cursor:pointer; ${style}" onclick="editTask('${task.id}')">
-
-              ${count}.
-              <input type="checkbox"
-                ${task.status === "completed" ? "checked" : ""}
-                onchange="toggleTask('${task.id}', this.checked)">
-
-              ${task.title}
-              <span style="color:${colorText}">(${task.priority})</span>
-              (${label})
-
-            </span>
-            <br>
-          `;
-
-          if (task.status !== "completed") count++;
+          html += `
+          <span style="${style}" onclick="editTask('${t.id}')">
+          ${i+1}.
+          <input type="checkbox"
+          ${t.status==="completed"?"checked":""}
+          onchange="toggleTask('${t.id}',this.checked)">
+          ${getPriorityLabel(t.priority)}
+          ${t.title}
+          </span><br>`;
         });
     });
 
-    card.innerHTML = content;
+    card.innerHTML = html;
     dashboard.appendChild(card);
   });
 }
 
-// Toggle Task (FIXED)
-window.toggleTask = async function (id, checked) {
+// Toggle
+window.toggleTask = async function(id,checked){
 
-  if (checked) {
-    await updateDoc(doc(db, "tasks", id), { status: "completed" });
+  await updateDoc(doc(db,"tasks",id),{
+    status: checked?"completed":"pending"
+  });
 
-    loadTasks();
+  loadTasks();
 
-    setTimeout(async () => {
-      const snapshot = await getDocs(collection(db, "tasks"));
-      let task;
+  if(checked){
+    setTimeout(async()=>{
+      const snapshot = await getDocs(collection(db,"tasks"));
+      let t;
+      snapshot.forEach(d=>{ if(d.id===id) t={id:d.id,...d.data()}; });
 
-      snapshot.forEach(d => {
-        if (d.id === id) task = { id: d.id, ...d.data() };
-      });
+      if(!t || t.status!=="completed") return;
 
-      if (!task || task.status !== "completed") return;
+      if(t.repeat!=="none"){
+        let next=new Date(t.dueDate.toDate());
+        if(t.repeat==="daily") next.setDate(next.getDate()+1);
+        else if(t.repeat==="weekly") next.setDate(next.getDate()+7);
+        else next.setDate(next.getDate()+parseInt(t.repeat));
 
-      if (task.repeat && task.repeat !== "none") {
-
-        let nextDate = new Date(task.dueDate.toDate());
-
-        if (task.repeat === "daily") nextDate.setDate(nextDate.getDate() + 1);
-        else if (task.repeat === "weekly") nextDate.setDate(nextDate.getDate() + 7);
-        else nextDate.setDate(nextDate.getDate() + parseInt(task.repeat));
-
-        await addDoc(collection(db, "tasks"), {
-          department: task.department,
-          assignedTo: task.assignedTo,
-          title: task.title,
-          priority: task.priority,
-          repeat: task.repeat,
-          dueDate: nextDate,
-          status: "pending",
-          createdAt: new Date()
+        await addDoc(collection(db,"tasks"),{
+          ...t,
+          dueDate:next,
+          status:"pending"
         });
       }
 
       loadTasks();
 
-    }, 1500);
-
-  } else {
-    await updateDoc(doc(db, "tasks", id), { status: "pending" });
-    loadTasks();
+    },1500);
   }
 };
 
