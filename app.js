@@ -3,7 +3,7 @@ import {
   collection, addDoc, getDocs, updateDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Department → Employees mapping
+// Department mapping
 const employeesMap = {
   child: ["Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"],
   oral: ["Dr Harshitha", "Nethra"],
@@ -12,21 +12,23 @@ const employeesMap = {
 
 const dashboard = document.getElementById("dashboard");
 
-// Load employees based on department
+// 🔥 Ensure function is available globally
 window.loadEmployees = function () {
   const dept = document.getElementById("department").value;
   const empSelect = document.getElementById("employee");
 
   empSelect.innerHTML = '<option value="">Select Employee</option>';
 
-  if (employeesMap[dept]) {
-    employeesMap[dept].forEach(emp => {
-      const option = document.createElement("option");
-      option.value = emp;
-      option.text = emp;
-      empSelect.appendChild(option);
-    });
-  }
+  if (!dept) return;
+
+  const list = employeesMap[dept] || [];
+
+  list.forEach(emp => {
+    const option = document.createElement("option");
+    option.value = emp;
+    option.textContent = emp;
+    empSelect.appendChild(option);
+  });
 };
 
 // Add Task
@@ -67,7 +69,6 @@ async function loadTasks() {
 
   snapshot.forEach(docSnap => {
     const data = docSnap.data();
-
     if (data.status === "completed") return;
 
     if (!grouped[data.department]) grouped[data.department] = {};
@@ -81,7 +82,6 @@ async function loadTasks() {
     const deptDiv = document.createElement("div");
     deptDiv.className = "department";
     deptDiv.innerHTML = dept.toUpperCase();
-
     dashboard.appendChild(deptDiv);
 
     Object.keys(grouped[dept]).forEach(emp => {
@@ -125,7 +125,7 @@ async function loadTasks() {
   });
 }
 
-// Complete Task
+// Complete
 window.completeTask = async function(id) {
   await updateDoc(doc(db, "tasks", id), {
     status: "completed"
