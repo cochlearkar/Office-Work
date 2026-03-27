@@ -3,7 +3,6 @@ import {
   collection, addDoc, getDocs, updateDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Department → Employees mapping
 const employeesMap = {
   child: ["Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"],
   oral: ["Dr Harshitha", "Nethra"],
@@ -12,10 +11,9 @@ const employeesMap = {
 
 const dashboard = document.getElementById("dashboard");
 
-// ✅ Attach event listener properly (fix for your error)
+// Load employees
 document.getElementById("department").addEventListener("change", loadEmployees);
 
-// Load employees based on department
 function loadEmployees() {
   const dept = document.getElementById("department").value;
   const empSelect = document.getElementById("employee");
@@ -24,9 +22,7 @@ function loadEmployees() {
 
   if (!dept) return;
 
-  const list = employeesMap[dept] || [];
-
-  list.forEach(emp => {
+  employeesMap[dept].forEach(emp => {
     const option = document.createElement("option");
     option.value = emp;
     option.textContent = emp;
@@ -42,8 +38,8 @@ window.addTask = async function () {
   const priority = document.getElementById("priority").value;
   const days = parseInt(document.getElementById("days").value);
 
-  if (!department || !employee || !task || !days || days <= 0) {
-    alert("Please fill all fields correctly");
+  if (!department || !employee || !task || !days) {
+    alert("Fill all fields");
     return;
   }
 
@@ -63,7 +59,30 @@ window.addTask = async function () {
   loadTasks();
 };
 
-// Load Tasks (Department → Employee grouping)
+// ✏️ EDIT FUNCTION
+window.editTask = async function (id, oldTitle, oldPriority) {
+  const newTitle = prompt("Edit Task", oldTitle);
+  if (!newTitle) return;
+
+  const newPriority = prompt("Edit Priority (high/medium/low)", oldPriority);
+  if (!newPriority) return;
+
+  const newDays = prompt("Enter new deadline (days)");
+  if (!newDays) return;
+
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + parseInt(newDays));
+
+  await updateDoc(doc(db, "tasks", id), {
+    title: newTitle,
+    priority: newPriority,
+    dueDate
+  });
+
+  loadTasks();
+};
+
+// Load Tasks
 async function loadTasks() {
   dashboard.innerHTML = "";
   const snapshot = await getDocs(collection(db, "tasks"));
@@ -72,8 +91,6 @@ async function loadTasks() {
 
   snapshot.forEach(docSnap => {
     const data = docSnap.data();
-
-    // Only show pending
     if (data.status === "completed") return;
 
     if (!grouped[data.department]) grouped[data.department] = {};
@@ -84,7 +101,6 @@ async function loadTasks() {
   });
 
   Object.keys(grouped).forEach(dept => {
-    // Department title
     const deptDiv = document.createElement("div");
     deptDiv.className = "department";
     deptDiv.innerHTML = dept.toUpperCase();
@@ -93,50 +109,23 @@ async function loadTasks() {
     Object.keys(grouped[dept]).forEach(emp => {
       const tasks = grouped[dept][emp];
 
-      let overdue = 0;
-      let oldest = 0;
-
-      tasks.forEach(t => {
-        if (t.dueDate && t.dueDate.toDate) {
-          const delay = Math.floor(
-            (new Date() - t.dueDate.toDate()) / (1000 * 60 * 60 * 24)
-          );
-          if (delay > 0) {
-            overdue++;
-            if (delay > oldest) oldest = delay;
-          }
-        }
-      });
-
-      // Workload color logic
-      let color = "green";
-      if (tasks.length > 5) color = "red";
-      else if (tasks.length > 2) color = "yellow";
-
       const card = document.createElement("div");
-      card.className = "card " + color;
+      card.className = "card";
 
-      let content = `
-        <div class="employee">${emp}</div>
-        <div class="summary">
-          Pending: ${tasks.length} | Overdue: ${overdue} | Oldest: ${oldest} days
-        </div>
-      `;
+      let content = `<div class="employee">${emp}</div>`;
 
       tasks.forEach(task => {
-        let delay = 0;
-
-        if (task.dueDate && task.dueDate.toDate) {
-          delay = Math.floor(
-            (new Date() - task.dueDate.toDate()) / (1000 * 60 * 60 * 24)
-          );
-        }
+        const delay = Math.floor(
+          (new Date() - task.dueDate.toDate()) / (1000 * 60 * 60 * 24)
+        );
 
         content += `
           <div class="task">
             ${task.title} (${task.priority})<br>
             Delay: ${delay > 0 ? delay + " days" : "On time"}<br>
+
             <button onclick="completeTask('${task.id}')">Done</button>
+            <button onclick="editTask('${task.id}', '${task.title}', '${task.priority}')">Edit</button>
           </div>
         `;
       });
@@ -147,7 +136,7 @@ async function loadTasks() {
   });
 }
 
-// Complete Task
+// Complete
 window.completeTask = async function (id) {
   await updateDoc(doc(db, "tasks", id), {
     status: "completed"
@@ -155,5 +144,4 @@ window.completeTask = async function (id) {
   loadTasks();
 };
 
-// Initial load
 loadTasks();
