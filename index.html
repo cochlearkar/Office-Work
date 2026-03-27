@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Task Manager</title>
+</head>
+<body>
+
+<h2>Task Manager</h2>
+
+<h3>Create Task</h3>
+<input id="task" placeholder="Task" />
+<select id="priority">
+  <option value="high">High</option>
+  <option value="medium">Medium</option>
+  <option value="low">Low</option>
+</select>
+<input id="employee" placeholder="Employee ID" />
+<input id="days" type="number" placeholder="Deadline (days)" />
+
+<button onclick="addTask()">Add Task</button>
+
+<h3>Tasks</h3>
+<ul id="taskList"></ul>
+
+<script type="module" src="app.js"></script>
+
+</body>
+</html>
