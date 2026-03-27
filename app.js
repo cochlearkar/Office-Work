@@ -3,488 +3,446 @@ import {
   collection, addDoc, getDocs, updateDoc, deleteDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// ─── State ────────────────────────────────────────────
+// ── Data ───────────────────────────────────────────
 const employeesMap = {
-  child: ["Dr Basavaraj", "Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"],
-  oral:  ["Dr Basavaraj", "Dr Harshitha", "Nethra"],
-  ci:    ["Dr Basavaraj", "Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"]
+  child: ["Dr Basavaraj","Dr Vanitha B","Mr Madhukar","Miss Sumayya","Miss Manjula"],
+  oral:  ["Dr Basavaraj","Dr Harshitha","Nethra"],
+  ci:    ["Dr Basavaraj","Dr Vanitha B","Mr Madhukar","Miss Sumayya","Miss Manjula"]
 };
+const deptNames = { child:"Child Health", oral:"Oral Health", ci:"Cochlear Implant" };
+const avatarColors = ["#0d9488","#7c3aed","#db2777","#d97706","#2563eb","#059669","#dc2626"];
 
-const deptNames   = { child:"Child Health", oral:"Oral Health", ci:"Cochlear Implant" };
-const avatarColors = ["#6366f1","#ec4899","#14b8a6","#f59e0b","#8b5cf6","#ef4444","#0ea5e9"];
-
-// Priority visuals – soft SVG-style flag icons via CSS+text
 const priMeta = {
-  p1: { label:"Urgent",  color:"#f87171", bg:"#fff1f1", icon:"🚩" },
-  p2: { label:"High",    color:"#fb923c", bg:"#fff7ed", icon:"🔶" },
-  p3: { label:"Normal",  color:"#60a5fa", bg:"#eff6ff", icon:"🔷" },
-  p4: { label:"Low",     color:"#94a3b8", bg:"#f8fafc", icon:"⬜" }
+  p1:{ icon:"🚩", label:"Urgent" },
+  p2:{ icon:"🔶", label:"High"   },
+  p3:{ icon:"🔷", label:"Normal" },
+  p4:{ icon:"🩶", label:"Low"    }
 };
 
-let selectedDept     = "child";
-let selectedEmployee = "";
-let selectedPriority = "p4";
-let editMode         = false;
-let editId           = null;
-let allTasks         = [];
-let currentFilter    = "all";
-let currentSort      = "priority";
-let currentSearch    = "";
-let listView         = false;
-let deleteTargetId   = null;
-let statsVisible     = false;
-let collapsedCards   = new Set();
+// ── State ──────────────────────────────────────────
+let dept          = "child";
+let allTasks      = [];
+let selectedPri   = "p4";
+let editPri       = "p4";
+let editId        = null;
+let delId         = null;
+let currentFilter = "all";
+let currentSort   = "priority";
+let statsVisible  = false;
+let openCards     = new Set(); // track which emp cards are open
 
-// ─── DOM refs ────────────────────────────────────────
-const dashboard   = document.getElementById("dashboard");
-const empDiv      = document.getElementById("employees");
-const mainBtn     = document.getElementById("mainBtn");
-const cancelBtn   = document.getElementById("cancelBtn");
-const pageTitle   = document.getElementById("pageTitle");
-const breadcrumb  = document.getElementById("breadcrumb");
-const sidebarStat = document.getElementById("sidebarStats");
-const statsBar    = document.getElementById("statsBar");
-const toastEl     = document.getElementById("toast");
+// ── DOM ────────────────────────────────────────────
+const dashboard = document.getElementById("dashboard");
+const toast     = document.getElementById("toast");
 
-// ─── Boot: load Firebase data first, then render ──────
+// ── Boot ───────────────────────────────────────────
 loadTasks();
 
-// ─── Department ───────────────────────────────────────
-window.selectDepartment = function(dept) {
-  selectedDept    = dept;
-  selectedEmployee = "";
-
-  document.querySelectorAll(".nav-btn").forEach(b =>
-    b.classList.toggle("active", b.dataset.dept === dept)
+// ── Department ─────────────────────────────────────
+window.selectDepartment = function(d) {
+  dept = d;
+  document.querySelectorAll(".dept-tab").forEach(b =>
+    b.classList.toggle("active", b.dataset.dept === d)
   );
-  pageTitle.textContent  = deptNames[dept];
-  breadcrumb.textContent = "Select an employee to assign a task";
-
-  renderEmpTabs();
-  updateSidebarStats();
+  populateAssignSelect();
   renderDashboard();
+  updateStats();
 };
 
-function renderEmpTabs() {
-  empDiv.innerHTML = "";
-  employeesMap[selectedDept].forEach((emp, i) => {
-    const cnt = allTasks.filter(t => t.assignedTo === emp && t.status !== "completed").length;
-    const btn = document.createElement("button");
-    btn.className    = "emp-tab";
-    btn.dataset.emp  = emp;
-    btn.innerHTML    = `${emp} <span class="task-count">${cnt}</span>`;
-    btn.onclick = () => {
-      selectedEmployee = emp;
-      document.querySelectorAll(".emp-tab").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      breadcrumb.textContent = `Assigning to: ${emp}`;
-    };
-    empDiv.appendChild(btn);
+function populateAssignSelect() {
+  const sel = document.getElementById("assignTo");
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">— Assign to —</option>`;
+  employeesMap[dept].forEach(e => {
+    const o = document.createElement("option");
+    o.value = o.textContent = e;
+    if (e === cur) o.selected = true;
+    sel.appendChild(o);
   });
 }
 
-function updateEmployeeTabs() {
-  document.querySelectorAll(".emp-tab").forEach(btn => {
-    const emp  = btn.dataset.emp;
-    const cnt  = allTasks.filter(t => t.assignedTo === emp && t.status !== "completed").length;
-    const el   = btn.querySelector(".task-count");
-    if (el) el.textContent = cnt;
-  });
-}
-
-// ─── Priority ─────────────────────────────────────────
+// ── Priority ───────────────────────────────────────
 window.selectPriority = function(p) {
-  selectedPriority = p;
-  document.querySelectorAll(".pri-btn").forEach(b => b.classList.remove("selected"));
+  selectedPri = p;
+  document.querySelectorAll(".pri-chip:not([id^='e'])").forEach(b => b.classList.remove("selected"));
   const el = document.getElementById(p);
-  if (el) el.classList.add("selected");
+  if(el) el.classList.add("selected");
 };
 
-// ─── Add / Update Task ────────────────────────────────
+window.selectEditPriority = function(p) {
+  editPri = p;
+  ["ep1","ep2","ep3","ep4"].forEach(id => document.getElementById(id)?.classList.remove("selected"));
+  const el = document.getElementById("e"+p);
+  if(el) el.classList.add("selected");
+};
+
+// ── Add Task ───────────────────────────────────────
 window.addTask = async function() {
-  const task     = document.getElementById("task").value.trim();
-  const repeat   = document.getElementById("repeat").value;
-  const days     = parseInt(document.getElementById("days").value);
-  const category = document.getElementById("category").value;
-  const notes    = document.getElementById("notes").value.trim();
+  const title  = document.getElementById("task").value.trim();
+  const emp    = document.getElementById("assignTo").value;
+  const days   = parseInt(document.getElementById("days").value) || 0;
+  const repeat = document.getElementById("repeat").value;
 
-  if (!task)             { showToast("Please enter a task description", "error"); return; }
-  if (!selectedEmployee) { showToast("Please select an employee first", "error"); return; }
+  if (!title) { showToast("Enter a task description","error"); return; }
+  if (!emp)   { showToast("Select who to assign this to","error"); return; }
 
-  const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + days);
+  const due = new Date();
+  due.setHours(0,0,0,0);
+  due.setDate(due.getDate() + days);
 
-  mainBtn.textContent = editMode ? "Updating…" : "Adding…";
-  mainBtn.disabled    = true;
+  const btn = document.getElementById("mainBtn");
+  btn.textContent = "…"; btn.disabled = true;
 
   try {
-    if (editMode && editId) {
-      await updateDoc(doc(db, "tasks", editId), {
-        title:task, priority:selectedPriority, repeat,
-        dueDate, department:selectedDept, assignedTo:selectedEmployee,
-        category, notes
-      });
-      showToast("Task updated ✓", "success");
-      cancelEdit();
-    } else {
-      await addDoc(collection(db, "tasks"), {
-        title:task, priority:selectedPriority, repeat,
-        dueDate, department:selectedDept, assignedTo:selectedEmployee,
-        status:"pending", category, notes, createdAt:new Date()
-      });
-      showToast("Task added ✓", "success");
-      document.getElementById("task").value  = "";
-      document.getElementById("notes").value = "";
-    }
+    await addDoc(collection(db,"tasks"),{
+      title, assignedTo:emp, department:dept,
+      dueDate:due, priority:selectedPri, repeat,
+      status:"pending", createdAt:new Date()
+    });
+    document.getElementById("task").value = "";
+    openCards.add(emp); // auto-open that employee's card
+    showToast("Task added ✓","success");
     await loadTasks(true);
   } catch(e) {
     console.error(e);
-    showToast("Error saving task", "error");
+    showToast("Error saving task","error");
   }
-
-  mainBtn.textContent = editMode ? "Update Task" : "＋ Add Task";
-  mainBtn.disabled    = false;
+  btn.textContent = "＋"; btn.disabled = false;
 };
 
-// ─── Edit ─────────────────────────────────────────────
-window.editTask = function(id) {
+// ── Edit (modal) ───────────────────────────────────
+window.openEditModal = function(id) {
   const t = allTasks.find(t => t.id === id);
-  if (!t) return;
+  if(!t) return;
+  editId  = id;
+  editPri = t.priority || "p4";
 
-  editMode = true; editId = id;
-  selectedEmployee = t.assignedTo;
-  selectedDept     = t.department;
-  selectedPriority = t.priority;
+  document.getElementById("editTask").value   = t.title;
+  document.getElementById("editRepeat").value = t.repeat || "none";
 
-  document.getElementById("task").value     = t.title;
-  document.getElementById("notes").value    = t.notes    || "";
-  document.getElementById("repeat").value   = t.repeat   || "none";
-  document.getElementById("category").value = t.category || "general";
+  // set days select closest to remaining days
+  const diff = diffDays(t);
+  const opts  = [0,1,2,3,5,7];
+  const best  = opts.reduce((a,b) => Math.abs(b-diff)<Math.abs(a-diff)?b:a, 0);
+  document.getElementById("editDays").value = best < 0 ? 0 : best;
 
-  selectPriority(t.priority);
-  mainBtn.textContent      = "Update Task";
-  cancelBtn.style.display  = "inline-block";
+  // set priority chips in modal
+  ["ep1","ep2","ep3","ep4"].forEach(id => document.getElementById(id)?.classList.remove("selected"));
+  const eEl = document.getElementById("e"+editPri);
+  if(eEl) eEl.classList.add("selected");
 
-  // highlight employee tab
-  document.querySelectorAll(".emp-tab").forEach(b => {
-    b.classList.toggle("active", b.dataset.emp === t.assignedTo);
-  });
-  breadcrumb.textContent = `Editing task for: ${t.assignedTo}`;
-
-  document.querySelector(".task-form-card").scrollIntoView({ behavior:"smooth" });
-  document.getElementById("task").focus();
+  document.getElementById("editModal").style.display = "flex";
+  setTimeout(()=>document.getElementById("editTask").focus(), 100);
 };
 
-window.cancelEdit = function() {
-  editMode = false; editId = null;
-  document.getElementById("task").value  = "";
-  document.getElementById("notes").value = "";
-  mainBtn.textContent     = "＋ Add Task";
-  cancelBtn.style.display = "none";
+window.closeEditModal = function() {
+  document.getElementById("editModal").style.display = "none";
+  editId = null;
 };
 
-// ─── Toggle Complete ──────────────────────────────────
+window.closeEditIfOutside = function(e) {
+  if(e.target === document.getElementById("editModal")) closeEditModal();
+};
+
+window.saveEdit = async function() {
+  const title  = document.getElementById("editTask").value.trim();
+  const days   = parseInt(document.getElementById("editDays").value) || 0;
+  const repeat = document.getElementById("editRepeat").value;
+
+  if(!title) { showToast("Task cannot be empty","error"); return; }
+
+  const due = new Date();
+  due.setHours(0,0,0,0);
+  due.setDate(due.getDate() + days);
+
+  const btn = document.querySelector(".modal-save");
+  btn.textContent = "Saving…"; btn.disabled = true;
+
+  try {
+    await updateDoc(doc(db,"tasks",editId),{
+      title, dueDate:due, priority:editPri, repeat
+    });
+    showToast("Updated ✓","success");
+    closeEditModal();
+    await loadTasks(true);
+  } catch(e) {
+    console.error(e);
+    showToast("Error updating","error");
+  }
+  btn.textContent = "Save Changes"; btn.disabled = false;
+};
+
+// ── Toggle complete ────────────────────────────────
 window.toggleTask = async function(id, checked) {
   try {
-    await updateDoc(doc(db,"tasks",id), { status: checked ? "completed" : "pending" });
-    showToast(checked ? "Task completed 🎉" : "Task reopened", checked ? "success" : "");
+    await updateDoc(doc(db,"tasks",id),{ status: checked?"completed":"pending" });
+    showToast(checked ? "Done! 🎉" : "Reopened", checked?"success":"");
     await loadTasks(true);
 
-    if (checked) {
-      setTimeout(async() => {
-        const t = allTasks.find(t => t.id === id);
-        if (!t || !t.repeat || t.repeat === "none") return;
+    if(checked){
+      setTimeout(async()=>{
+        const t = allTasks.find(t=>t.id===id);
+        if(!t || !t.repeat || t.repeat==="none") return;
         const next = new Date(safeDate(t.dueDate));
-        if (t.repeat === "daily")  next.setDate(next.getDate() + 1);
-        else if (t.repeat === "weekly") next.setDate(next.getDate() + 7);
-        else next.setDate(next.getDate() + parseInt(t.repeat));
-        const { id: _id, ...rest } = t;
-        await addDoc(collection(db,"tasks"), { ...rest, dueDate:next, status:"pending", createdAt:new Date() });
+        if(t.repeat==="daily")  next.setDate(next.getDate()+1);
+        else if(t.repeat==="weekly") next.setDate(next.getDate()+7);
+        const {id:_,createdAt:__,...rest} = t;
+        await addDoc(collection(db,"tasks"),{...rest,dueDate:next,status:"pending",createdAt:new Date()});
         await loadTasks(true);
-        showToast("Recurring task scheduled 🔁", "success");
-      }, 1500);
+        showToast("Next recurrence scheduled 🔁","success");
+      },1500);
     }
-  } catch(e) { console.error(e); showToast("Error updating task","error"); }
+  } catch(e){ showToast("Error","error"); }
 };
 
-// ─── Delete ───────────────────────────────────────────
-window.confirmDeleteTask = function(id) {
-  deleteTargetId = id;
-  document.getElementById("deleteModal").style.display = "grid";
+// ── Delete ─────────────────────────────────────────
+window.openDeleteModal = function(id) {
+  delId = id;
+  document.getElementById("deleteModal").style.display = "flex";
 };
 window.closeDeleteModal = function() {
   document.getElementById("deleteModal").style.display = "none";
-  deleteTargetId = null;
+  delId = null;
 };
 window.confirmDelete = async function() {
-  if (!deleteTargetId) return;
+  if(!delId) return;
   try {
-    await deleteDoc(doc(db,"tasks", deleteTargetId));
+    await deleteDoc(doc(db,"tasks",delId));
     closeDeleteModal();
-    showToast("Task deleted","");
+    showToast("Deleted","");
     await loadTasks(true);
-  } catch(e) { showToast("Error deleting task","error"); }
+  } catch(e){ showToast("Error deleting","error"); }
 };
 
-// ─── Load from Firebase ───────────────────────────────
-async function loadTasks(keepDept = false) {
+// ── Load Firebase ──────────────────────────────────
+async function loadTasks(keepDept=false) {
   try {
-    const snapshot = await getDocs(collection(db,"tasks"));
-    allTasks = snapshot.docs.map(d => ({ id:d.id, ...d.data() }));
+    const snap = await getDocs(collection(db,"tasks"));
+    allTasks = snap.docs.map(d=>({id:d.id,...d.data()}));
   } catch(e) {
-    console.error("Firebase error:", e);
+    console.error("Firebase:",e);
     allTasks = [];
-    showToast("Could not reach database","error");
+    showToast("Cannot reach database","error");
   }
-  if (!keepDept) {
-    selectDepartment(selectedDept);   // full re-render from scratch
+  if(!keepDept) {
+    populateAssignSelect();
+    selectDepartment(dept);
   } else {
-    updateEmployeeTabs();
-    updateSidebarStats();
+    populateAssignSelect();
     renderDashboard();
+    updateStats();
   }
 }
 
-// ─── Filter / Sort / Search ───────────────────────────
-window.setFilter = function(f, btn) {
+// ── Filter / Sort ──────────────────────────────────
+window.setFilter = function(f,btn) {
   currentFilter = f;
-  document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".fchip").forEach(b=>b.classList.remove("active"));
   btn.classList.add("active");
   renderDashboard();
 };
-window.setSortMode = function(s) { currentSort = s; renderDashboard(); };
-window.filterTasks = function() {
-  currentSearch = document.getElementById("searchInput").value.toLowerCase();
-  renderDashboard();
-};
+window.setSortMode = function(s){ currentSort=s; renderDashboard(); };
 
-function applyFilters(tasks) {
-  // Only show tasks for current department
-  let r = tasks.filter(t => t.department === selectedDept);
-
-  if (currentSearch) {
-    r = r.filter(t =>
-      (t.title||"").toLowerCase().includes(currentSearch) ||
-      (t.notes||"").toLowerCase().includes(currentSearch)
-    );
-  }
-  if (currentFilter === "pending")   r = r.filter(t => t.status !== "completed");
-  if (currentFilter === "completed") r = r.filter(t => t.status === "completed");
-  if (currentFilter === "overdue")   r = r.filter(t => t.status !== "completed" && diffDays(t) < 0);
+function filterTasks(tasks) {
+  let r = tasks.filter(t=>t.department===dept);
+  if(currentFilter==="pending")   r=r.filter(t=>t.status!=="completed");
+  if(currentFilter==="completed") r=r.filter(t=>t.status==="completed");
+  if(currentFilter==="overdue")   r=r.filter(t=>t.status!=="completed"&&diffDays(t)<0);
   return r;
 }
-
 function sortTasks(tasks) {
-  const po = { p1:1,p2:2,p3:3,p4:4 };
-  if (currentSort === "priority") return [...tasks].sort((a,b) => po[a.priority]-po[b.priority]);
-  if (currentSort === "date")     return [...tasks].sort((a,b) => safeDate(a.dueDate)-safeDate(b.dueDate));
-  if (currentSort === "title")    return [...tasks].sort((a,b) => (a.title||"").localeCompare(b.title||""));
+  const po={p1:1,p2:2,p3:3,p4:4};
+  if(currentSort==="priority") return [...tasks].sort((a,b)=>po[a.priority]-po[b.priority]);
+  if(currentSort==="date")     return [...tasks].sort((a,b)=>safeDate(a.dueDate)-safeDate(b.dueDate));
+  if(currentSort==="name")     return [...tasks].sort((a,b)=>(a.title||"").localeCompare(b.title||""));
   return tasks;
 }
 
-// ─── Render Dashboard ─────────────────────────────────
+// ── Render Dashboard ───────────────────────────────
 function renderDashboard() {
-  dashboard.innerHTML = "";
-  dashboard.className = "dashboard" + (listView ? " list-view" : "");
+  const filtered = filterTasks(allTasks);
+  const emps     = employeesMap[dept];
 
-  // Show ALL employees for the department, even those with 0 tasks
-  const allEmps    = employeesMap[selectedDept];
-  const filtTasks  = applyFilters(allTasks);
-
-  // If search/filter yields nothing
-  if (currentSearch && filtTasks.length === 0) {
-    dashboard.innerHTML = `<div class="empty-state">
-      <div class="empty-icon">🔍</div>
-      <h3>No tasks match your search</h3>
-      <p>Try different keywords or clear the filter.</p>
-    </div>`;
+  if(!emps.length){
+    dashboard.innerHTML=`<div class="empty-state"><div class="empty-icon">🏥</div><h3>No staff in this dept</h3></div>`;
     return;
   }
 
-  allEmps.forEach((emp, ei) => {
-    const empTasks  = filtTasks.filter(t => t.assignedTo === emp);
-    const allEmpT   = allTasks.filter(t => t.assignedTo === emp && t.department === selectedDept);
-    const active    = allEmpT.filter(t => t.status !== "completed");
-    const overdueCnt = allEmpT.filter(t => t.status !== "completed" && diffDays(t) < 0).length;
+  dashboard.innerHTML = "";
 
-    const total = allEmpT.length;
-    const done  = allEmpT.filter(t => t.status === "completed").length;
-    const pct   = total ? Math.round((done/total)*100) : 0;
-    const wl    = active.length > 5 ? "red" : active.length > 2 ? "yellow" : "green";
-    const wlLabel = { red:"Overloaded", yellow:"Moderate", green:"Light" }[wl];
+  emps.forEach((emp,ei) => {
+    const empFiltered = filtered.filter(t=>t.assignedTo===emp);
+    const empAll      = allTasks.filter(t=>t.assignedTo===emp&&t.department===dept);
+    const active      = empAll.filter(t=>t.status!=="completed");
+    const overdueCnt  = active.filter(t=>diffDays(t)<0).length;
+    const done        = empAll.filter(t=>t.status==="completed").length;
+    const pct         = empAll.length ? Math.round((done/empAll.length)*100) : 0;
 
-    const color   = avatarColors[ei % avatarColors.length];
-    const initials = emp.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+    const wl    = active.length>5?"heavy":active.length>2?"medium":"ok";
+    const wlLbl = {heavy:"Heavy load",medium:"Moderate",ok:"Clear"}[wl];
+    const color = avatarColors[ei%avatarColors.length];
+    const initials = emp.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
+    const isOpen = openCards.has(emp);
 
-    const section = document.createElement("div");
-    section.className = "emp-section" + (collapsedCards.has(emp) ? " collapsed" : "");
-
-    const buckets = bucketTasks(empTasks);
+    // bucket tasks
+    const buckets = bucket(empFiltered);
     const order   = ["overdue","today","tomorrow","upcoming","completed"];
-    const labels  = { overdue:"Overdue", today:"Due Today", tomorrow:"Due Tomorrow", upcoming:"Upcoming", completed:"Completed" };
+    const secLabels = {overdue:"Overdue",today:"Today",tomorrow:"Tomorrow",upcoming:"Upcoming",completed:"Done"};
 
     let bodyHtml = "";
-    order.forEach(sec => {
+    order.forEach(sec=>{
       const list = sortTasks(buckets[sec]);
-      if (!list.length) return;
-      bodyHtml += `<div class="task-section">
-        <div class="task-section-label">
-          <span class="section-dot dot-${sec}"></span>${labels[sec]} <span class="sec-count">${list.length}</span>
-        </div>`;
-      list.forEach(t => { bodyHtml += renderTask(t); });
-      bodyHtml += `</div>`;
+      if(!list.length) return;
+      bodyHtml += `<div class="sec-label">
+        <span class="sec-dot dot-${sec==="completed"?"done":sec}"></span>${secLabels[sec]}
+      </div>`;
+      list.forEach(t=>{ bodyHtml += renderTaskRow(t); });
     });
 
-    if (!bodyHtml) {
-      bodyHtml = `<div class="no-task-msg">No tasks ${currentFilter !== "all" ? "matching filter" : "assigned yet"}</div>`;
+    if(!bodyHtml) {
+      bodyHtml = `<div class="card-empty">${currentFilter==="all"?"No tasks assigned yet":"No tasks match this filter"}</div>`;
     }
 
-    const safeEmp = emp.replace(/'/g, "\\'");
-    section.innerHTML = `
-      <div class="emp-header" onclick="toggleCard('${safeEmp}')">
-        <div class="emp-header-left">
-          <div class="emp-avatar" style="background:${color}">${initials}</div>
-          <div>
-            <div class="emp-name">${emp}</div>
-            <div class="emp-meta">${active.length} pending · ${overdueCnt > 0 ? `<span class="ov-warn">⚠ ${overdueCnt} overdue</span>` : "all clear"}</div>
+    const safeEmp = emp.replace(/'/g,"\\'");
+    const card = document.createElement("div");
+    card.className = "emp-card" + (isOpen?" open":"");
+
+    const ovHtml = overdueCnt>0
+      ? `<span class="sub-ov">⚠ ${overdueCnt} overdue</span>`
+      : `<span>All clear</span>`;
+
+    const progColor = pct>66?"#22c55e":pct>33?"#f59e0b":"#6366f1";
+
+    card.innerHTML = `
+      <div class="emp-card-head" onclick="toggleCard('${safeEmp}')">
+        <div class="emp-av" style="background:${color}">${initials}</div>
+        <div class="emp-info">
+          <div class="emp-name-row">
+            <span class="emp-name">${emp}</span>
+            <span class="emp-badge badge-${wl}">${wlLbl}</span>
+          </div>
+          <div class="emp-sub">
+            <span>${active.length} pending</span>
+            ${overdueCnt>0?`<span>·</span>${ovHtml}`:""}
           </div>
         </div>
-        <div class="emp-header-right">
-          <div class="progress-bar-wrap" title="${pct}% done">
-            <div class="progress-bar-fill" style="width:${pct}%;background:${pct>66?"#22c55e":pct>33?"#f59e0b":"#6366f1"}"></div>
+        <div class="emp-right">
+          <div class="prog-wrap" title="${pct}% done">
+            <div class="prog-fill" style="width:${pct}%;background:${progColor}"></div>
           </div>
-          <span class="workload-badge badge-${wl}">${wlLabel}</span>
-          <span class="chevron">▼</span>
+          <span class="chevron-ic">▼</span>
         </div>
       </div>
       <div class="emp-body">${bodyHtml}</div>`;
 
-    dashboard.appendChild(section);
+    dashboard.appendChild(card);
   });
 }
 
-// ─── Render single task row ───────────────────────────
-function renderTask(t) {
-  const done     = t.status === "completed";
-  const diff     = diffDays(t);
-  const dueTxt   = diff < 0 ? `${Math.abs(diff)}d overdue` : diff === 0 ? "Due today" : `In ${diff}d`;
-  const dueClass = diff < 0 && !done ? "overdue" : "";
-  const pm       = priMeta[t.priority] || priMeta.p4;
-  const cat      = t.category || "general";
-  const catLabels = { patient:"Patient", admin:"Admin", followup:"Follow-up", report:"Report", meeting:"Meeting", general:"" };
-  const catLabel  = catLabels[cat] || "";
-  const repeat    = t.repeat && t.repeat !== "none" ? `<span class="task-tag repeat-tag">🔁 Repeat</span>` : "";
+function renderTaskRow(t) {
+  const done   = t.status==="completed";
+  const diff   = diffDays(t);
+  const pm     = priMeta[t.priority] || priMeta.p4;
+  const rep    = t.repeat&&t.repeat!=="none" ? `<span class="repeat-chip">↻</span>` : "";
+
+  let dueHtml = "";
+  if(!done){
+    const dueDate = safeDate(t.dueDate);
+    const dd = dueDate.toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+    if(diff<0)      dueHtml=`<span class="task-due-chip due-over">⚠ ${Math.abs(diff)}d overdue</span>`;
+    else if(diff===0) dueHtml=`<span class="task-due-chip due-today">Today</span>`;
+    else if(diff===1) dueHtml=`<span class="task-due-chip due-soon">Tomorrow</span>`;
+    else            dueHtml=`<span class="task-due-chip due-ok">${dd}</span>`;
+  }
 
   return `
-  <div class="task-row ${done ? "done" : ""}">
-    <div class="pri-flag" style="background:${pm.bg};color:${pm.color}" title="${pm.label}">${pm.icon}</div>
-    <input type="checkbox" class="task-cb" ${done?"checked":""} 
+  <div class="task-row ${done?"done":""}">
+    <span class="pri-flag">${pm.icon}</span>
+    <input type="checkbox" class="task-cb" ${done?"checked":""}
       onchange="toggleTask('${t.id}',this.checked)" onclick="event.stopPropagation()">
-    <div class="task-body">
-      <div class="task-title" onclick="editTask('${t.id}')">${t.title}</div>
-      <div class="task-meta">
-        ${catLabel ? `<span class="task-tag tag-${cat}">${catLabel}</span>` : ""}
-        <span class="task-due ${dueClass}">📅 ${dueTxt}</span>
-        ${repeat}
-        ${t.notes ? `<span class="task-tag notes-tag" title="${t.notes}">📝 Note</span>` : ""}
-      </div>
+    <div class="task-content">
+      <div class="task-text">${t.title}${rep}</div>
+      ${dueHtml}
     </div>
-    <div class="task-actions">
-      <button class="task-act-btn" onclick="editTask('${t.id}')" title="Edit">✏️</button>
-      <button class="task-act-btn del" onclick="confirmDeleteTask('${t.id}')" title="Delete">🗑</button>
+    <div class="task-acts">
+      <button class="tact-btn" onclick="openEditModal('${t.id}')" title="Edit">✏️</button>
+      <button class="tact-btn del" onclick="openDeleteModal('${t.id}')" title="Delete">🗑</button>
     </div>
   </div>`;
 }
 
-// ─── Helpers ──────────────────────────────────────────
-function bucketTasks(tasks) {
-  const s = { overdue:[], today:[], tomorrow:[], upcoming:[], completed:[] };
-  tasks.forEach(t => {
-    if (t.status === "completed") { s.completed.push(t); return; }
-    const d = diffDays(t);
-    if (d < 0) s.overdue.push(t);
-    else if (d === 0) s.today.push(t);
-    else if (d === 1) s.tomorrow.push(t);
-    else s.upcoming.push(t);
-  });
-  return s;
-}
-
-function safeDate(v) {
-  if (!v) return new Date();
-  if (typeof v.toDate === "function") return v.toDate();
-  return new Date(v);
-}
-
-function diffDays(t) {
-  const due = safeDate(t.dueDate);
-  const now = new Date(); now.setHours(0,0,0,0);
-  return Math.ceil((due - now) / 86400000);
-}
-
-// ─── Collapse / Expand ────────────────────────────────
+// ── Collapse toggle ────────────────────────────────
 window.toggleCard = function(emp) {
-  collapsedCards.has(emp) ? collapsedCards.delete(emp) : collapsedCards.add(emp);
+  if(openCards.has(emp)) openCards.delete(emp);
+  else openCards.add(emp);
   renderDashboard();
 };
 
-// ─── Sidebar stats ────────────────────────────────────
-function updateSidebarStats() {
-  const dt = allTasks.filter(t => t.department === selectedDept);
-  const pending = dt.filter(t => t.status !== "completed").length;
-  const overdue = dt.filter(t => t.status !== "completed" && diffDays(t) < 0).length;
-  sidebarStat.textContent = `${pending} pending · ${overdue} overdue`;
-}
-
-// ─── Stats Panel ──────────────────────────────────────
+// ── Stats ──────────────────────────────────────────
 window.toggleStats = function() {
   statsVisible = !statsVisible;
-  if (!statsVisible) { statsBar.style.display = "none"; return; }
-  const dt    = allTasks.filter(t => t.department === selectedDept);
+  document.getElementById("statsStrip").style.display = statsVisible?"flex":"none";
+  if(statsVisible) updateStats();
+};
+function updateStats() {
+  if(!statsVisible) return;
+  const dt    = allTasks.filter(t=>t.department===dept);
   const total = dt.length;
-  const done  = dt.filter(t => t.status === "completed").length;
-  const ov    = dt.filter(t => t.status !== "completed" && diffDays(t) < 0).length;
-  const urg   = dt.filter(t => t.priority === "p1" && t.status !== "completed").length;
-  statsBar.style.display = "flex";
-  statsBar.innerHTML = `
-    <div class="stat-card blue"><div class="stat-num">${total}</div><div class="stat-lbl">Total</div></div>
-    <div class="stat-card green"><div class="stat-num">${done}</div><div class="stat-lbl">Completed</div></div>
-    <div class="stat-card red"><div class="stat-num">${ov}</div><div class="stat-lbl">Overdue</div></div>
-    <div class="stat-card orange"><div class="stat-num">${urg}</div><div class="stat-lbl">Urgent</div></div>
-    <div class="stat-card"><div class="stat-num">${total?Math.round((done/total)*100):0}%</div><div class="stat-lbl">Done rate</div></div>`;
-};
+  const done  = dt.filter(t=>t.status==="completed").length;
+  const ov    = dt.filter(t=>t.status!=="completed"&&diffDays(t)<0).length;
+  const urg   = dt.filter(t=>t.priority==="p1"&&t.status!=="completed").length;
+  const pct   = total?Math.round((done/total)*100):0;
+  document.getElementById("statsStrip").innerHTML = `
+    <div class="stat-pill"><div class="snum">${total}</div><div class="slbl">Total</div></div>
+    <div class="stat-pill green"><div class="snum">${done}</div><div class="slbl">Done</div></div>
+    <div class="stat-pill red"><div class="snum">${ov}</div><div class="slbl">Overdue</div></div>
+    <div class="stat-pill amber"><div class="snum">${urg}</div><div class="slbl">Urgent</div></div>
+    <div class="stat-pill"><div class="snum">${pct}%</div><div class="slbl">Rate</div></div>`;
+}
 
-// ─── View Toggle ──────────────────────────────────────
-window.toggleView = function() {
-  listView = !listView;
-  document.getElementById("viewToggleBtn").textContent = listView ? "📦 Card View" : "📋 List View";
-  renderDashboard();
-};
-
-// ─── Export CSV ───────────────────────────────────────
+// ── Export CSV ─────────────────────────────────────
 window.exportTasks = function() {
-  const dt = allTasks.filter(t => t.department === selectedDept);
-  if (!dt.length) { showToast("No tasks to export","error"); return; }
-  const rows = [["Employee","Task","Category","Priority","Status","Due Date","Repeat","Notes"]];
-  dt.forEach(t => {
-    rows.push([
-      t.assignedTo, t.title, t.category||"general",
+  const dt = allTasks.filter(t=>t.department===dept);
+  if(!dt.length){ showToast("No tasks to export","error"); return; }
+  const rows=[["Employee","Task","Priority","Status","Due Date","Repeat"]];
+  dt.forEach(t=>{
+    rows.push([t.assignedTo,t.title,
       {p1:"Urgent",p2:"High",p3:"Normal",p4:"Low"}[t.priority]||"",
-      t.status, safeDate(t.dueDate).toLocaleDateString(),
-      t.repeat||"none", t.notes||""
-    ]);
+      t.status, safeDate(t.dueDate).toLocaleDateString(), t.repeat||"none"]);
   });
-  const csv = rows.map(r => r.map(c=>`"${c}"`).join(",")).join("\n");
-  const a   = document.createElement("a");
-  a.href    = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
-  a.download = `${deptNames[selectedDept].replace(/ /g,"_")}_tasks_${new Date().toISOString().slice(0,10)}.csv`;
+  const csv=rows.map(r=>r.map(c=>`"${c}"`).join(",")).join("\n");
+  const a=document.createElement("a");
+  a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);
+  a.download=`${deptNames[dept].replace(/ /g,"_")}_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   showToast("Exported ✓","success");
 };
 
-// ─── Toast ────────────────────────────────────────────
-function showToast(msg, type="") {
-  toastEl.textContent = msg;
-  toastEl.className   = "toast show " + type;
-  setTimeout(() => toastEl.className = "toast", 2800);
+// ── Helpers ────────────────────────────────────────
+function bucket(tasks) {
+  const s={overdue:[],today:[],tomorrow:[],upcoming:[],completed:[]};
+  tasks.forEach(t=>{
+    if(t.status==="completed"){s.completed.push(t);return;}
+    const d=diffDays(t);
+    if(d<0)      s.overdue.push(t);
+    else if(d===0) s.today.push(t);
+    else if(d===1) s.tomorrow.push(t);
+    else           s.upcoming.push(t);
+  });
+  return s;
+}
+function safeDate(v){
+  if(!v) return new Date();
+  if(typeof v.toDate==="function") return v.toDate();
+  return new Date(v);
+}
+function diffDays(t){
+  const due=safeDate(t.dueDate);
+  const now=new Date(); now.setHours(0,0,0,0);
+  return Math.ceil((due-now)/86400000);
+}
+function showToast(msg,type=""){
+  toast.textContent=msg;
+  toast.className="toast show "+(type||"");
+  setTimeout(()=>toast.className="toast",2800);
 }
