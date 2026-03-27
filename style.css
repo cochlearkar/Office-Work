@@ -17,15 +17,23 @@ body {
   box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
-.high { border-left: 5px solid red; }
-.medium { border-left: 5px solid orange; }
-.low { border-left: 5px solid green; }
+.green { border-left: 6px solid green; }
+.yellow { border-left: 6px solid orange; }
+.red { border-left: 6px solid red; }
 
 .employee {
   font-weight: bold;
+  margin-bottom: 10px;
+  font-size: 18px;
+}
+
+.summary {
+  font-size: 14px;
   margin-bottom: 10px;
 }
 
 .task {
   margin-bottom: 8px;
+  padding: 5px;
+  border-bottom: 1px solid #eee;
 }
