@@ -3,7 +3,6 @@ import {
   collection, addDoc, getDocs, updateDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Departments
 const employeesMap = {
   child: ["Dr Vanitha B", "Mr Madhukar", "Miss Sumayya", "Miss Manjula"],
   oral: ["Dr Harshitha", "Nethra"],
@@ -37,7 +36,7 @@ window.selectDepartment = function (dept) {
   });
 };
 
-// Highlight selected employee
+// Highlight employee
 function highlightEmployee(emp) {
   const buttons = empDiv.querySelectorAll("button");
   buttons.forEach(btn => {
@@ -119,32 +118,79 @@ function clearForm() {
   document.getElementById("days").value = "";
 }
 
-// Load Tasks
+// Load Tasks (GROUPED + COLOR)
 async function loadTasks() {
   dashboard.innerHTML = "";
   const snapshot = await getDocs(collection(db, "tasks"));
 
+  let grouped = {};
+
   snapshot.forEach(docSnap => {
-    const task = { id: docSnap.id, ...docSnap.data() };
-    if (task.status === "completed") return;
+    const data = docSnap.data();
+    if (data.status === "completed") return;
 
-    const card = document.createElement("div");
-    card.className = "card";
+    if (!grouped[data.department]) grouped[data.department] = {};
+    if (!grouped[data.department][data.assignedTo])
+      grouped[data.department][data.assignedTo] = [];
 
-    const delay = Math.floor(
-      (new Date() - task.dueDate.toDate()) / (1000 * 60 * 60 * 24)
-    );
+    grouped[data.department][data.assignedTo].push({ id: docSnap.id, ...data });
+  });
 
-    card.innerHTML = `
-      <b>${task.department.toUpperCase()}</b> - ${task.assignedTo}<br>
-      ${task.title} (${task.priority})<br>
-      Delay: ${delay > 0 ? delay + " days" : "On time"}<br>
+  Object.keys(grouped).forEach(dept => {
 
-      <button onclick='editTask(${JSON.stringify(task)})'>Edit</button>
-      <button onclick="completeTask('${task.id}')">Done</button>
-    `;
+    const deptTitle = document.createElement("div");
+    deptTitle.className = "department";
+    deptTitle.innerHTML = dept.toUpperCase();
+    dashboard.appendChild(deptTitle);
 
-    dashboard.appendChild(card);
+    Object.keys(grouped[dept]).forEach(emp => {
+      const tasks = grouped[dept][emp];
+
+      let overdue = 0;
+      let oldest = 0;
+
+      tasks.forEach(t => {
+        if (t.dueDate && t.dueDate.toDate) {
+          const d = Math.floor((new Date() - t.dueDate.toDate()) / (1000*60*60*24));
+          if (d > 0) {
+            overdue++;
+            if (d > oldest) oldest = d;
+          }
+        }
+      });
+
+      // Workload color
+      let color = "green";
+      if (tasks.length > 5) color = "red";
+      else if (tasks.length > 2) color = "yellow";
+
+      const card = document.createElement("div");
+      card.className = "card " + color;
+
+      let content = `
+        <div class="employee">${emp}</div>
+        <div class="summary">
+          Pending: ${tasks.length} | Overdue: ${overdue} | Oldest: ${oldest} days
+        </div>
+      `;
+
+      tasks.forEach(task => {
+        const delay = Math.floor((new Date() - task.dueDate.toDate()) / (1000*60*60*24));
+
+        content += `
+          <div class="task">
+            ${task.title} (${task.priority})<br>
+            Delay: ${delay > 0 ? delay + " days" : "On time"}<br>
+
+            <button onclick='editTask(${JSON.stringify(task)})'>Edit</button>
+            <button onclick="completeTask('${task.id}')">Done</button>
+          </div>
+        `;
+      });
+
+      card.innerHTML = content;
+      dashboard.appendChild(card);
+    });
   });
 }
 
