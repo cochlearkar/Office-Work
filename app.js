@@ -17,7 +17,7 @@ if (!days || days <= 0) {
 }
 
   const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + parseInt(days));
+dueDate.setDate(dueDate.getDate() + days);
 
   await addDoc(collection(db, "tasks"), {
     title: task,
