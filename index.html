@@ -1,95 +1,165 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Office Task Manager</title>
-
-  <style>
-    body { font-family: Arial; margin: 20px; }
-
-    button { margin: 5px; padding: 6px 10px; }
-
-    input { margin: 5px; padding: 6px; }
-
-    .card {
-      border-radius: 10px;
-      padding: 10px;
-      margin: 10px 0;
-    }
-
-    .green { background: #d4edda; }
-    .yellow { background: #fff3cd; }
-    .red { background: #f8d7da; }
-
-    .employee { font-weight: bold; }
-
-    .section { margin-top: 5px; font-weight: bold; }
-
-    /* Flag styles */
-    .flag {
-      cursor: pointer;
-      font-size: 18px;
-      margin: 3px;
-      padding: 3px 6px;
-      border-radius: 5px;
-    }
-
-    .selected {
-      border: 2px solid black;
-    }
-
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
 
-<h2>Office Task Manager</h2>
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">⚕</div>
+    <div>
+      <div class="logo-title">TaskFlow</div>
+      <div class="logo-sub">Office Suite</div>
+    </div>
+  </div>
 
-<b>Select Department:</b><br>
-<button onclick="selectDepartment('child')">Child Health</button>
-<button onclick="selectDepartment('oral')">Oral Health</button>
-<button onclick="selectDepartment('ci')">Cochlear Implant</button>
+  <nav class="sidebar-nav">
+    <div class="nav-label">DEPARTMENTS</div>
+    <button class="nav-btn active" onclick="selectDepartment('child')" data-dept="child">
+      <span class="nav-icon">👶</span> Child Health
+    </button>
+    <button class="nav-btn" onclick="selectDepartment('oral')" data-dept="oral">
+      <span class="nav-icon">🦷</span> Oral Health
+    </button>
+    <button class="nav-btn" onclick="selectDepartment('ci')" data-dept="ci">
+      <span class="nav-icon">🔊</span> Cochlear Implant
+    </button>
+  </nav>
 
-<div id="employees"></div>
+  <div class="sidebar-footer">
+    <button class="view-toggle-btn" onclick="toggleView()" id="viewToggleBtn">
+      📋 List View
+    </button>
+    <div class="stat-mini" id="sidebarStats">—</div>
+  </div>
+</aside>
 
-<br>
+<!-- Main -->
+<main class="main">
 
-<input id="task" placeholder="Enter Task">
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1 class="page-title" id="pageTitle">Child Health</h1>
+      <div class="breadcrumb" id="breadcrumb">Select an employee to assign tasks</div>
+    </div>
+    <div class="topbar-right">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="searchInput" placeholder="Search tasks…" oninput="filterTasks()" />
+      </div>
+      <button class="icon-btn" onclick="exportTasks()" title="Export">📤</button>
+      <button class="icon-btn" onclick="toggleStats()" title="Stats">📊</button>
+    </div>
+  </header>
 
-<br>
+  <!-- Stats Bar (hidden by default) -->
+  <div class="stats-bar" id="statsBar" style="display:none"></div>
 
-<!-- Flag selection -->
-<div>
-  <b>Select Priority:</b><br>
-  <span class="flag" id="p1" onclick="selectPriority('p1')">🚩</span>
-  <span class="flag" id="p2" onclick="selectPriority('p2')">🟧</span>
-  <span class="flag" id="p3" onclick="selectPriority('p3')">🔵</span>
-  <span class="flag" id="p4" onclick="selectPriority('p4')">⚪</span>
+  <!-- Employee Tabs -->
+  <div class="emp-tabs" id="employees"></div>
+
+  <!-- Task Form -->
+  <div class="task-form-card" id="taskFormCard">
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>Task Description</label>
+        <input id="task" class="form-input" placeholder="e.g. Follow up with patient records, Schedule appointment…" />
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <div class="priority-group">
+          <button class="pri-btn" id="p1" onclick="selectPriority('p1')" title="Urgent">🚩 Urgent</button>
+          <button class="pri-btn" id="p2" onclick="selectPriority('p2')" title="High">🟧 High</button>
+          <button class="pri-btn" id="p3" onclick="selectPriority('p3')" title="Normal">🔵 Normal</button>
+          <button class="pri-btn selected" id="p4" onclick="selectPriority('p4')" title="Low">⚪ Low</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Due Date</label>
+        <select id="days" class="form-select">
+          <option value="0">Today</option>
+          <option value="1">Tomorrow</option>
+          <option value="2">In 2 days</option>
+          <option value="3">In 3 days</option>
+          <option value="5">In 5 days</option>
+          <option value="7">In 1 week</option>
+          <option value="14">In 2 weeks</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Repeat</label>
+        <select id="repeat" class="form-select">
+          <option value="none">No Repeat</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="7">Every 7 Days</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select id="category" class="form-select">
+          <option value="general">General</option>
+          <option value="patient">Patient Care</option>
+          <option value="admin">Administration</option>
+          <option value="followup">Follow-up</option>
+          <option value="report">Report / Docs</option>
+          <option value="meeting">Meeting</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Notes (optional)</label>
+        <input id="notes" class="form-input" placeholder="Additional notes…" />
+      </div>
+    </div>
+    <div class="form-actions">
+      <button id="cancelBtn" class="btn-secondary" onclick="cancelEdit()" style="display:none">Cancel</button>
+      <button id="mainBtn" class="btn-primary" onclick="addTask()">＋ Add Task</button>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+    <button class="filter-btn" onclick="setFilter('pending', this)">Pending</button>
+    <button class="filter-btn" onclick="setFilter('completed', this)">Completed</button>
+    <button class="filter-btn" onclick="setFilter('overdue', this)">⚠ Overdue</button>
+    <div style="flex:1"></div>
+    <select class="form-select mini" onchange="setSortMode(this.value)">
+      <option value="priority">Sort: Priority</option>
+      <option value="date">Sort: Due Date</option>
+      <option value="title">Sort: Title</option>
+    </select>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dashboard" class="dashboard"></div>
+
+</main>
+
+<!-- Delete Confirm Modal -->
+<div class="modal-overlay" id="deleteModal" style="display:none">
+  <div class="modal-card">
+    <div class="modal-icon">🗑</div>
+    <h3>Delete Task?</h3>
+    <p>This action cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn-danger" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
 </div>
 
-<br>
-
-<select id="repeat">
-  <option value="none">No Repeat</option>
-  <option value="daily">Daily</option>
-  <option value="weekly">Weekly</option>
-  <option value="7">Every 7 Days</option>
-</select>
-
-<select id="days">
-  <option value="0">Today</option>
-  <option value="1">Tomorrow</option>
-  <option value="2">In 2 days</option>
-  <option value="3">In 3 days</option>
-  <option value="5">In 5 days</option>
-</select>
-
-<button id="mainBtn" onclick="addTask()">Add Task</button>
-
-<hr>
-
-<div id="dashboard"></div>
+<!-- Toast -->
+<div class="toast" id="toast"></div>
 
 <script type="module" src="app.js"></script>
-
 </body>
 </html>
