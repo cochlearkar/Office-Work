@@ -11,6 +11,7 @@ const employeesMap = {
 
 let selectedDept = "";
 let selectedEmployee = "";
+let selectedPriority = "p4";
 let editMode = false;
 let editId = null;
 
@@ -18,7 +19,7 @@ const dashboard = document.getElementById("dashboard");
 const empDiv = document.getElementById("employees");
 const mainBtn = document.getElementById("mainBtn");
 
-// Department select
+// Department
 window.selectDepartment = function (dept) {
   selectedDept = dept;
   empDiv.innerHTML = "";
@@ -31,10 +32,17 @@ window.selectDepartment = function (dept) {
   });
 };
 
+// Priority select
+window.selectPriority = function (p) {
+  selectedPriority = p;
+
+  document.querySelectorAll(".flag").forEach(f => f.classList.remove("selected"));
+  document.getElementById(p).classList.add("selected");
+};
+
 // Add / Update
 window.addTask = async function () {
   const task = document.getElementById("task").value;
-  const priority = document.getElementById("priority").value;
   const repeat = document.getElementById("repeat").value;
   const days = parseInt(document.getElementById("days").value);
 
@@ -48,16 +56,22 @@ window.addTask = async function () {
 
   if (editMode && editId) {
     await updateDoc(doc(db, "tasks", editId), {
-      title: task, priority, repeat, dueDate,
-      department: selectedDept, assignedTo: selectedEmployee
+      title: task,
+      priority: selectedPriority,
+      repeat,
+      dueDate,
+      department: selectedDept,
+      assignedTo: selectedEmployee
     });
+
     editMode = false;
     editId = null;
     mainBtn.innerText = "Add Task";
+
   } else {
     await addDoc(collection(db, "tasks"), {
       title: task,
-      priority,
+      priority: selectedPriority,
       repeat,
       dueDate,
       department: selectedDept,
@@ -70,32 +84,17 @@ window.addTask = async function () {
   loadTasks();
 };
 
-// Edit
-window.editTask = async function (id) {
-  const snapshot = await getDocs(collection(db, "tasks"));
-  snapshot.forEach(d => {
-    if (d.id === id) {
-      const t = d.data();
-      document.getElementById("task").value = t.title;
-      document.getElementById("priority").value = t.priority;
-      editMode = true;
-      editId = id;
-      mainBtn.innerText = "Update Task";
-    }
-  });
-};
-
-// Priority label
-function getPriorityLabel(p) {
+// Flag display
+function getFlag(p) {
   return {
-    p1: `<span class="p1">P1</span>`,
-    p2: `<span class="p2">P2</span>`,
-    p3: `<span class="p3">P3</span>`,
-    p4: `<span class="p4">P4</span>`
+    p1: "🚩",
+    p2: "🟧",
+    p3: "🔵",
+    p4: "⚪"
   }[p];
 }
 
-// Load Tasks
+// Load
 async function loadTasks() {
   dashboard.innerHTML = "";
   const snapshot = await getDocs(collection(db, "tasks"));
@@ -111,7 +110,6 @@ async function loadTasks() {
   Object.keys(grouped).forEach(emp => {
 
     let tasks = grouped[emp];
-
     let active = tasks.filter(t => t.status !== "completed");
 
     let color = active.length > 5 ? "red" : active.length > 2 ? "yellow" : "green";
@@ -121,12 +119,7 @@ async function loadTasks() {
 
     let html = `<div class="employee">${emp}</div>`;
 
-    const sections = {
-      overdue: [],
-      today: [],
-      tomorrow: [],
-      upcoming: []
-    };
+    const sections = { overdue: [], today: [], tomorrow: [], upcoming: [] };
 
     tasks.forEach(t => {
       const diff = Math.ceil((t.dueDate.toDate() - new Date())/(1000*60*60*24));
@@ -137,7 +130,7 @@ async function loadTasks() {
       else sections.upcoming.push(t);
     });
 
-    const order = ["overdue", "today", "tomorrow", "upcoming"];
+    const order = ["overdue","today","tomorrow","upcoming"];
 
     order.forEach(sec => {
 
@@ -160,7 +153,7 @@ async function loadTasks() {
           <input type="checkbox"
           ${t.status==="completed"?"checked":""}
           onchange="toggleTask('${t.id}',this.checked)">
-          ${getPriorityLabel(t.priority)}
+          ${getFlag(t.priority)}
           ${t.title}
           </span><br>`;
         });
