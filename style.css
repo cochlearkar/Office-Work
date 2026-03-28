@@ -25,14 +25,16 @@ body{
 
 /* ══ LOGIN ══════════════════════════════════════════ */
 .login-screen{
-  min-height:100vh;display:flex;align-items:center;justify-content:center;
-  padding:24px 16px;
+  min-height:100vh;display:flex;align-items:flex-start;justify-content:center;
+  padding:32px 16px;
   background:linear-gradient(160deg,#0f766e 0%,#0d9488 40%,#f0fdfa 100%);
 }
 .login-card{
   background:#fff;border-radius:20px;padding:32px 24px;
   box-shadow:0 20px 60px rgba(0,0,0,.15);width:100%;max-width:380px;
   text-align:center;
+  max-height:calc(100vh - 64px);
+  overflow-y:auto;
 }
 .login-logo{
   width:64px;height:64px;background:linear-gradient(135deg,var(--teal),var(--teal-d));
