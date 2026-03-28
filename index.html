@@ -18,6 +18,16 @@
     <div class="login-logo">⚕</div>
     <div class="login-title">Office TaskFlow</div>
     <div class="login-sub">Select your name to continue</div>
+    <!-- Landing forecast widget (visible to all before login) -->
+    <div id="landingForecast" style="margin-bottom:14px">
+      <div style="height:72px;background:linear-gradient(135deg,#f0fdfa,#e0f2fe);border-radius:14px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:12px;font-weight:600">Loading forecast…</div>
+    </div>
+
+    <!-- Top 3 urgent tasks (visible to all before login) -->
+    <div id="landingUrgent" style="margin-bottom:18px">
+      <div style="height:48px;background:#f8fafc;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:12px;font-weight:600">Loading tasks…</div>
+    </div>
+
     <div class="login-names" id="loginNames">
       <!-- populated by JS -->
     </div>
@@ -50,7 +60,6 @@
   <!-- ── ADMIN: dept tabs + stats strip ───────────── -->
   <div id="adminControls" style="display:none">
     <div class="stats-strip" id="statsStrip"></div>
-    <div id="dayForecast"></div>
     <div class="dept-tabs-wrap">
       <div class="dept-tabs">
         <button class="dept-tab" data-dept="urgent-view" onclick="selectUrgentView()">🔴 Urgent</button>
@@ -140,7 +149,7 @@
       </div>
     </div>
     <div class="modal-pri-label">Reassign to</div>
-    <select id="editAssignTo" class="mini-select" style="width:100%;margin-bottom:12px"></select>
+    <select id="editAssignTo" class="mini-select" style="width:100%;margin-bottom:14px"></select>
     <div class="modal-pri-label">Priority</div>
     <div class="modal-pri-row">
       <button class="mpri-btn p1-chip" id="ep1" onclick="selectEditPriority('p1')">🔴 Urgent</button>
@@ -165,6 +174,33 @@
     <div class="modal-actions">
       <button class="modal-cancel"  onclick="closeDeleteModal()">Cancel</button>
       <button class="modal-del-btn" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── ADMIN PIN OVERLAY ────────────────────────── -->
+<div id="pinOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:24px">
+  <div style="background:#fff;border-radius:20px;padding:32px 28px;width:100%;max-width:320px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.25)">
+    <div style="font-size:36px;margin-bottom:10px">🔐</div>
+    <div style="font-size:17px;font-weight:900;color:#0f172a;margin-bottom:4px">Admin Access</div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:22px;font-weight:600">Enter PIN to sign in as Dr Basavaraj</div>
+    <input id="pinInput" type="password" inputmode="numeric" maxlength="6"
+      placeholder="Enter PIN"
+      style="width:100%;padding:13px 16px;border:2px solid #e2e8f0;border-radius:12px;font-size:18px;text-align:center;letter-spacing:6px;font-family:inherit;font-weight:700;outline:none;margin-bottom:10px;transition:border-color .2s"
+      onfocus="this.style.borderColor='#0d9488'"
+      onblur="this.style.borderColor='#e2e8f0'"
+      onkeydown="if(event.key==='Enter')submitAdminPin()"/>
+    <div id="pinError" style="display:none;background:#fef2f2;color:#dc2626;font-size:12px;font-weight:700;padding:8px 12px;border-radius:8px;margin-bottom:12px">Incorrect PIN. Try again.</div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button onclick="cancelAdminPin()"
+        style="flex:1;padding:12px;border:2px solid #e2e8f0;border-radius:10px;background:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">
+        Cancel
+      </button>
+      <button onclick="submitAdminPin()"
+        style="flex:1;padding:12px;border:none;border-radius:10px;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+        Sign In →
+      </button>
     </div>
   </div>
 </div>

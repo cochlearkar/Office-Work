@@ -25,14 +25,16 @@ body{
 
 /* ══ LOGIN ══════════════════════════════════════════ */
 .login-screen{
-  min-height:100vh;display:flex;align-items:center;justify-content:center;
-  padding:24px 16px;
+  min-height:100vh;display:flex;align-items:flex-start;justify-content:center;
+  padding:32px 16px;
   background:linear-gradient(160deg,#0f766e 0%,#0d9488 40%,#f0fdfa 100%);
 }
 .login-card{
   background:#fff;border-radius:20px;padding:32px 24px;
   box-shadow:0 20px 60px rgba(0,0,0,.15);width:100%;max-width:380px;
   text-align:center;
+  max-height:calc(100vh - 64px);
+  overflow-y:auto;
 }
 .login-logo{
   width:64px;height:64px;background:linear-gradient(135deg,var(--teal),var(--teal-d));
@@ -388,72 +390,170 @@ body{
 
 @media(min-width:481px){body{box-shadow:0 0 40px rgba(0,0,0,.1);}}
 
-/* ══ DAY FORECAST ══════════════════════════════════ */
-#dayForecast { padding: 10px 12px 0; }
-.forecast-card {
+/* ══ LANDING PAGE WIDGETS ══════════════════════════════════════════ */
+
+/* ── Forecast card ── */
+.lf-card {
   border-radius: 14px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   margin-bottom: 2px;
 }
-.forecast-top {
+.lf-top {
   display: flex;
   align-items: flex-start;
   gap: 10px;
 }
-.forecast-icon {
-  font-size: 28px;
+.lf-icon {
+  font-size: 32px;
   line-height: 1;
   flex-shrink: 0;
+  margin-top: 2px;
 }
-.forecast-info {
+.lf-body {
   flex: 1;
   min-width: 0;
 }
-.forecast-mood {
-  font-size: 13px;
-  font-weight: 800;
+.lf-mood {
+  font-size: 14px;
+  font-weight: 900;
   line-height: 1.2;
 }
-.forecast-advice {
+.lf-advice {
   font-size: 11px;
-  color: #64748b;
+  color: #475569;
   margin-top: 3px;
-  line-height: 1.4;
+  line-height: 1.45;
+  font-weight: 600;
 }
-.forecast-nums {
+.lf-tomorrow {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 5px;
+  font-weight: 600;
+}
+.lf-pills {
   display: flex;
   gap: 5px;
   flex-shrink: 0;
+  align-items: flex-start;
 }
-.fn-pill {
+.lf-pill {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 4px 7px;
-  border-radius: 8px;
-  min-width: 36px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  min-width: 38px;
 }
-.fn-pill span {
-  font-size: 15px;
+.lf-pnum {
+  font-size: 17px;
   font-weight: 900;
   line-height: 1;
 }
-.fn-pill small {
+.lf-plbl {
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .04em;
-  margin-top: 1px;
+  margin-top: 2px;
 }
-.forecast-bar-track {
+.lf-bar-track {
   height: 5px;
-  background: #e2e8f0;
+  background: rgba(0,0,0,.1);
   border-radius: 3px;
-  margin-top: 10px;
+  margin-top: 12px;
   overflow: hidden;
 }
-.forecast-bar-fill {
+.lf-bar-fill {
   height: 100%;
   border-radius: 3px;
-  transition: width .6s ease;
+  transition: width .7s ease;
+}
+
+/* ── Top Urgent tasks on landing ── */
+.lu-header {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #dc2626;
+  background: #fef2f2;
+  border-radius: 10px 10px 0 0;
+  padding: 8px 12px;
+  border: 1.5px solid #fecaca;
+  border-bottom: none;
+}
+.lu-list {
+  border: 1.5px solid #fecaca;
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+}
+.lu-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border-bottom: 1px solid #fef2f2;
+}
+.lu-row:last-child { border-bottom: none; }
+.lu-rank {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.lu-content { flex: 1; min-width: 0; }
+.lu-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
+}
+.lu-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.lu-who {
+  font-size: 10px;
+  font-weight: 600;
+  color: #475569;
+}
+.lu-dept {
+  font-size: 10px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: #f5f3ff;
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+.lu-chip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+.lu-chip-over  { background: #fef2f2; color: #dc2626; }
+.lu-chip-today { background: #fff7ed; color: #ea580c; }
+.lu-chip-soon  { background: #f0fdf4; color: #059669; }
+.lu-empty {
+  font-size: 12px;
+  font-weight: 700;
+  color: #059669;
+  text-align: center;
+  padding: 14px;
+  background: #f0fdf4;
+  border-radius: 10px;
+  border: 1.5px solid #bbf7d0;
 }

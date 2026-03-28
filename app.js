@@ -11,8 +11,6 @@ const employeesMap = {
   oral:  ["Dr Basavaraj","Dr Harshitha","Nethra"],
   ci:    ["Dr Basavaraj","Dr Vanitha B","Mr Madhukar","Miss Sumayya","Miss Manjula"]
 };
-// CI and Child share the same staff — admin home shows each employee once per dept tab
-// Tasks are still stored with department:"ci" or "child" separately
 const deptNames = { child:"Child Health", oral:"Oral Health", ci:"Cochlear Implant" };
 const avatarColors = ["#0d9488","#7c3aed","#db2777","#d97706","#2563eb","#059669","#dc2626"];
 
@@ -49,6 +47,7 @@ const loginNames   = document.getElementById("loginNames");
 
 // ── Boot: show login ────────────────────────────────
 buildLoginScreen();
+loadTasksForLanding();   // fetch tasks immediately for landing page widgets
 
 function buildLoginScreen() {
   loginNames.innerHTML = "";
@@ -57,20 +56,14 @@ function buildLoginScreen() {
   const adminDiv = createNameBtn(ADMIN, true);
   loginNames.appendChild(adminDiv);
 
-  // Staff by dept — merge CI with Child (same staff, show once)
-  const shownStaff = new Set();
+  // Staff by dept
   Object.entries(employeesMap).forEach(([dept, emps]) => {
-    // Skip CI login section — same staff as Child, shown there already
-    if (dept === "ci") return;
-
     const label = document.createElement("div");
     label.className = "login-dept-label";
-    // If Child dept, label as "Child Health & CI" to indicate shared
-    label.textContent = dept === "child" ? deptNames[dept] + " & Cochlear Implant" : deptNames[dept];
+    label.textContent = deptNames[dept];
     loginNames.appendChild(label);
 
-    emps.filter(e => e !== ADMIN && !shownStaff.has(e)).forEach((emp) => {
-      shownStaff.add(emp);
+    emps.filter(e => e !== ADMIN).forEach((emp, i) => {
       const btn = createNameBtn(emp, false, dept);
       loginNames.appendChild(btn);
     });
@@ -90,9 +83,40 @@ function createNameBtn(name, admin, dept) {
       <div class="ln-name">${name}</div>
       <div class="ln-tag">${admin ? "Admin · All departments" : deptNames[dept]||""}</div>
     </div>`;
-  btn.onclick = () => loginAs(name);
+  if (admin) {
+    btn.onclick = () => promptAdminPin();
+  } else {
+    btn.onclick = () => loginAs(name);
+  }
   return btn;
 }
+
+
+// ── Admin PIN ──────────────────────────────────────
+const ADMIN_PIN = "1234";   // ← change this to your preferred PIN
+
+function promptAdminPin() {
+  document.getElementById("pinOverlay").style.display = "flex";
+  document.getElementById("pinInput").value = "";
+  document.getElementById("pinError").style.display = "none";
+  setTimeout(() => document.getElementById("pinInput").focus(), 100);
+}
+
+window.submitAdminPin = function() {
+  const entered = document.getElementById("pinInput").value.trim();
+  if (entered === ADMIN_PIN) {
+    document.getElementById("pinOverlay").style.display = "none";
+    loginAs(ADMIN);
+  } else {
+    document.getElementById("pinError").style.display = "block";
+    document.getElementById("pinInput").value = "";
+    document.getElementById("pinInput").focus();
+  }
+};
+
+window.cancelAdminPin = function() {
+  document.getElementById("pinOverlay").style.display = "none";
+};
 
 function loginAs(name) {
   currentUser = name;
@@ -125,69 +149,122 @@ window.logout = function() {
   loginScreen.style.display = "flex";
 };
 
+// ── Load tasks ─────────────────────────────────────
 
-// ── Day Pressure Forecast ─────────────────────────────────────────────────
-function updateDayForecast() {
-  const el = document.getElementById("dayForecast");
-  if (!el || !isAdmin) return;
+// ── Landing page: fetch tasks and render forecast + top-3 urgent ──────────
+async function loadTasksForLanding() {
+  try {
+    const snap = await getDocs(collection(db,"tasks"));
+    allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
+  } catch(e) {
+    console.warn("Landing load failed:", e.message);
+    return;
+  }
+  renderLandingForecast();
+  renderLandingUrgent();
+}
 
-  const today    = allTasks.filter(t => t.status !== "completed" && diffDays(t) === 0);
-  const overdue  = allTasks.filter(t => t.status !== "completed" && diffDays(t) < 0);
-  const urgent   = allTasks.filter(t => t.status !== "completed" && t.priority === "p1");
-  const tomorrow = allTasks.filter(t => t.status !== "completed" && diffDays(t) === 1);
+function renderLandingForecast() {
+  const el = document.getElementById("landingForecast");
+  if (!el) return;
+
+  const active   = allTasks.filter(t => t.status !== "completed");
+  const overdue  = active.filter(t => diffDays(t) < 0);
+  const today    = active.filter(t => diffDays(t) === 0);
+  const urgent   = active.filter(t => t.priority === "p1");
+  const tomorrow = active.filter(t => diffDays(t) === 1);
 
   const score = overdue.length * 3 + urgent.length * 2 + today.length;
 
-  let icon, mood, color, bg, bar, advice;
+  let icon, mood, color, bg, barPct, advice;
   if (score === 0) {
-    icon="☀️"; mood="Clear day"; color="#059669"; bg="#f0fdf4"; bar=5;
-    advice="No urgent tasks. Good time to plan ahead.";
+    icon="☀️"; mood="Clear Day"; color="#059669"; bg="linear-gradient(135deg,#f0fdf4,#dcfce7)"; barPct=4;
+    advice="All caught up — no urgent tasks pending.";
   } else if (score <= 3) {
-    icon="🌤️"; mood="Light load"; color="#0d9488"; bg="#f0fdfa"; bar=25;
-    advice="Manageable day. " + today.length + " task" + (today.length!==1?"s":"") + " due today.";
+    icon="🌤️"; mood="Light Load"; color="#0d9488"; bg="linear-gradient(135deg,#f0fdfa,#ccfbf1)"; barPct=22;
+    advice=`${today.length} task${today.length!==1?"s":""} due today. Manageable day ahead.`;
   } else if (score <= 7) {
-    icon="⛅"; mood="Moderate pressure"; color="#d97706"; bg="#fffbeb"; bar=55;
-    advice= today.length + " due today, " + overdue.length + " overdue. Stay focused.";
+    icon="⛅"; mood="Moderate Pressure"; color="#d97706"; bg="linear-gradient(135deg,#fffbeb,#fef3c7)"; barPct=52;
+    advice=`${today.length} due today · ${overdue.length} overdue. Stay focused.`;
   } else if (score <= 12) {
-    icon="🌧️"; mood="Heavy load"; color="#ea580c"; bg="#fff7ed"; bar=78;
-    advice= overdue.length + " overdue + " + urgent.length + " urgent. Prioritise now.";
+    icon="🌧️"; mood="Heavy Load"; color="#ea580c"; bg="linear-gradient(135deg,#fff7ed,#ffedd5)"; barPct=76;
+    advice=`${overdue.length} overdue + ${urgent.length} urgent. Prioritise immediately.`;
   } else {
-    icon="⛈️"; mood="Storm — Critical"; color="#dc2626"; bg="#fef2f2"; bar=100;
-    advice="High overdue & urgent. Immediate action needed across all staff.";
+    icon="⛈️"; mood="Storm — Critical"; color="#dc2626"; bg="linear-gradient(135deg,#fef2f2,#fee2e2)"; barPct=100;
+    advice=`${overdue.length} overdue & ${urgent.length} urgent tasks need immediate action!`;
   }
 
-  const tomorrow_note = tomorrow.length
-    ? `<div style="font-size:11px;color:#64748b;margin-top:6px">Tomorrow: ${tomorrow.length} task${tomorrow.length!==1?"s":""} coming up</div>`
+  const tomorrowNote = tomorrow.length
+    ? `<div class="lf-tomorrow">📅 Tomorrow: ${tomorrow.length} task${tomorrow.length!==1?"s":""} coming up</div>`
     : "";
 
   el.innerHTML = `
-    <div class="forecast-card" style="background:${bg};border:1.5px solid ${color}20;">
-      <div class="forecast-top">
-        <span class="forecast-icon">${icon}</span>
-        <div class="forecast-info">
-          <div class="forecast-mood" style="color:${color}">${mood}</div>
-          <div class="forecast-advice">${advice}</div>
-          ${tomorrow_note}
+    <div class="lf-card" style="background:${bg}">
+      <div class="lf-top">
+        <div class="lf-icon">${icon}</div>
+        <div class="lf-body">
+          <div class="lf-mood" style="color:${color}">${mood}</div>
+          <div class="lf-advice">${advice}</div>
+          ${tomorrowNote}
         </div>
-        <div class="forecast-nums">
-          <div class="fn-pill" style="background:${overdue.length?"#fef2f2":"#f1f5f9"};color:${overdue.length?"#dc2626":"#94a3b8"}">
-            <span>${overdue.length}</span><small>overdue</small>
+        <div class="lf-pills">
+          <div class="lf-pill" style="background:${overdue.length?"#fef2f2":"#f8fafc"};color:${overdue.length?"#dc2626":"#94a3b8"}">
+            <span class="lf-pnum">${overdue.length}</span>
+            <span class="lf-plbl">overdue</span>
           </div>
-          <div class="fn-pill" style="background:${today.length?"#fff7ed":"#f1f5f9"};color:${today.length?"#ea580c":"#94a3b8"}">
-            <span>${today.length}</span><small>today</small>
+          <div class="lf-pill" style="background:${today.length?"#fff7ed":"#f8fafc"};color:${today.length?"#ea580c":"#94a3b8"}">
+            <span class="lf-pnum">${today.length}</span>
+            <span class="lf-plbl">today</span>
           </div>
-          <div class="fn-pill" style="background:${urgent.length?"#fef2f2":"#f1f5f9"};color:${urgent.length?"#dc2626":"#94a3b8"}">
-            <span>${urgent.length}</span><small>urgent</small>
+          <div class="lf-pill" style="background:${urgent.length?"#fef2f2":"#f8fafc"};color:${urgent.length?"#dc2626":"#94a3b8"}">
+            <span class="lf-pnum">${urgent.length}</span>
+            <span class="lf-plbl">urgent</span>
           </div>
         </div>
       </div>
-      <div class="forecast-bar-track">
-        <div class="forecast-bar-fill" style="width:${bar}%;background:${color}"></div>
+      <div class="lf-bar-track">
+        <div class="lf-bar-fill" style="width:${barPct}%;background:${color}"></div>
       </div>
     </div>`;
 }
 
-// ── Load tasks ─────────────────────────────────────
+function renderLandingUrgent() {
+  const el = document.getElementById("landingUrgent");
+  if (!el) return;
+
+  // Top 3 longest-pending urgent tasks: p1 priority, not completed,
+  // sorted by oldest due date first (most overdue / longest pending first)
+  const urgentTasks = allTasks
+    .filter(t => t.priority === "p1" && t.status !== "completed")
+    .sort((a, b) => safeDate(a.dueDate) - safeDate(b.dueDate))
+    .slice(0, 3);
+
+  if (!urgentTasks.length) {
+    el.innerHTML = `<div class="lu-empty">✅ No urgent tasks pending right now</div>`;
+    return;
+  }
+
+  const rows = urgentTasks.map((t, i) => {
+    const diff     = diffDays(t);
+    const daysAgo  = diff < 0 ? `${Math.abs(diff)}d overdue` : diff === 0 ? "Due today" : `Due in ${diff}d`;
+    const chipCls  = diff < 0 ? "lu-chip-over" : diff === 0 ? "lu-chip-today" : "lu-chip-soon";
+    const assigned = t.assignedTo ? `<span class="lu-who">👤 ${t.assignedTo}</span>` : "";
+    const dept     = t.department ? `<span class="lu-dept">${deptNames[t.department]||t.department}</span>` : "";
+    return `
+      <div class="lu-row">
+        <div class="lu-rank">${i+1}</div>
+        <div class="lu-content">
+          <div class="lu-title">${t.title}</div>
+          <div class="lu-meta">${assigned}${dept}<span class="lu-chip ${chipCls}">${daysAgo}</span></div>
+        </div>
+      </div>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="lu-header">🔴 Top ${urgentTasks.length} Urgent — Needs Immediate Attention</div>
+    <div class="lu-list">${rows}</div>`;
+}
+
 async function loadTasks(keepView = false) {
   try {
     const snap = await getDocs(collection(db,"tasks"));
@@ -208,7 +285,6 @@ async function loadTasks(keepView = false) {
       else renderAdminDashboard();
       updateAdminStats();
     }
-    updateDayForecast();
   } else {
     renderStaffView();
   }
@@ -223,7 +299,6 @@ window.selectDepartment = function(d) {
   populateAssignSelect();
   renderAdminDashboard();
   updateAdminStats();
-  updateDayForecast();
 };
 
 window.selectUrgentView = function() {
@@ -232,7 +307,6 @@ window.selectUrgentView = function() {
   document.querySelector("[data-dept='urgent-view']")?.classList.add("active");
   renderUrgentView();
   updateAdminStats();
-  updateDayForecast();
 };
 
 function populateAssignSelect() {
@@ -571,11 +645,11 @@ window.openEditModal = function(id) {
   editId=id; editPri=t.priority||"p4";
   document.getElementById("editTask").value=t.title;
 
-  // Populate reassign dropdown with all staff in task's department
-  const reassignSel = document.getElementById("editAssignTo");
-  if (reassignSel) {
+  // Populate reassign dropdown
+  const reSel = document.getElementById("editAssignTo");
+  if (reSel) {
     const deptStaff = employeesMap[t.department] || allStaff;
-    reassignSel.innerHTML = deptStaff.map(e =>
+    reSel.innerHTML = deptStaff.map(e =>
       `<option value="${e}" ${e===t.assignedTo?"selected":""}>${e}</option>`
     ).join("");
   }
@@ -615,11 +689,11 @@ window.saveEdit=async function(){
   const due=new Date(); due.setHours(0,0,0,0); due.setDate(due.getDate()+days);
   const btn=document.querySelector(".modal-save");
   btn.textContent="Saving…"; btn.disabled=true;
-  const newAssignee = document.getElementById("editAssignTo")?.value || undefined;
+  const newAssignee = document.getElementById("editAssignTo")?.value;
   try{
-    const updatePayload = {title,dueDate:due,priority:editPri,repeat};
-    if (newAssignee) updatePayload.assignedTo = newAssignee;
-    await updateDoc(doc(db,"tasks",editId), updatePayload);
+    const payload = {title, dueDate:due, priority:editPri, repeat};
+    if (newAssignee) payload.assignedTo = newAssignee;
+    await updateDoc(doc(db,"tasks",editId), payload);
     showToast("Updated ✓","success");
     closeEditModal();
     await loadTasks(true);
