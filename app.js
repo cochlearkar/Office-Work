@@ -11,6 +11,8 @@ const employeesMap = {
   oral:  ["Dr Basavaraj","Dr Harshitha","Nethra"],
   ci:    ["Dr Basavaraj","Dr Vanitha B","Mr Madhukar","Miss Sumayya","Miss Manjula"]
 };
+// CI and Child share the same staff — admin home shows each employee once per dept tab
+// Tasks are still stored with department:"ci" or "child" separately
 const deptNames = { child:"Child Health", oral:"Oral Health", ci:"Cochlear Implant" };
 const avatarColors = ["#0d9488","#7c3aed","#db2777","#d97706","#2563eb","#059669","#dc2626"];
 
@@ -55,14 +57,20 @@ function buildLoginScreen() {
   const adminDiv = createNameBtn(ADMIN, true);
   loginNames.appendChild(adminDiv);
 
-  // Staff by dept
+  // Staff by dept — merge CI with Child (same staff, show once)
+  const shownStaff = new Set();
   Object.entries(employeesMap).forEach(([dept, emps]) => {
+    // Skip CI login section — same staff as Child, shown there already
+    if (dept === "ci") return;
+
     const label = document.createElement("div");
     label.className = "login-dept-label";
-    label.textContent = deptNames[dept];
+    // If Child dept, label as "Child Health & CI" to indicate shared
+    label.textContent = dept === "child" ? deptNames[dept] + " & Cochlear Implant" : deptNames[dept];
     loginNames.appendChild(label);
 
-    emps.filter(e => e !== ADMIN).forEach((emp, i) => {
+    emps.filter(e => e !== ADMIN && !shownStaff.has(e)).forEach((emp) => {
+      shownStaff.add(emp);
       const btn = createNameBtn(emp, false, dept);
       loginNames.appendChild(btn);
     });
@@ -117,6 +125,68 @@ window.logout = function() {
   loginScreen.style.display = "flex";
 };
 
+
+// ── Day Pressure Forecast ─────────────────────────────────────────────────
+function updateDayForecast() {
+  const el = document.getElementById("dayForecast");
+  if (!el || !isAdmin) return;
+
+  const today    = allTasks.filter(t => t.status !== "completed" && diffDays(t) === 0);
+  const overdue  = allTasks.filter(t => t.status !== "completed" && diffDays(t) < 0);
+  const urgent   = allTasks.filter(t => t.status !== "completed" && t.priority === "p1");
+  const tomorrow = allTasks.filter(t => t.status !== "completed" && diffDays(t) === 1);
+
+  const score = overdue.length * 3 + urgent.length * 2 + today.length;
+
+  let icon, mood, color, bg, bar, advice;
+  if (score === 0) {
+    icon="☀️"; mood="Clear day"; color="#059669"; bg="#f0fdf4"; bar=5;
+    advice="No urgent tasks. Good time to plan ahead.";
+  } else if (score <= 3) {
+    icon="🌤️"; mood="Light load"; color="#0d9488"; bg="#f0fdfa"; bar=25;
+    advice="Manageable day. " + today.length + " task" + (today.length!==1?"s":"") + " due today.";
+  } else if (score <= 7) {
+    icon="⛅"; mood="Moderate pressure"; color="#d97706"; bg="#fffbeb"; bar=55;
+    advice= today.length + " due today, " + overdue.length + " overdue. Stay focused.";
+  } else if (score <= 12) {
+    icon="🌧️"; mood="Heavy load"; color="#ea580c"; bg="#fff7ed"; bar=78;
+    advice= overdue.length + " overdue + " + urgent.length + " urgent. Prioritise now.";
+  } else {
+    icon="⛈️"; mood="Storm — Critical"; color="#dc2626"; bg="#fef2f2"; bar=100;
+    advice="High overdue & urgent. Immediate action needed across all staff.";
+  }
+
+  const tomorrow_note = tomorrow.length
+    ? `<div style="font-size:11px;color:#64748b;margin-top:6px">Tomorrow: ${tomorrow.length} task${tomorrow.length!==1?"s":""} coming up</div>`
+    : "";
+
+  el.innerHTML = `
+    <div class="forecast-card" style="background:${bg};border:1.5px solid ${color}20;">
+      <div class="forecast-top">
+        <span class="forecast-icon">${icon}</span>
+        <div class="forecast-info">
+          <div class="forecast-mood" style="color:${color}">${mood}</div>
+          <div class="forecast-advice">${advice}</div>
+          ${tomorrow_note}
+        </div>
+        <div class="forecast-nums">
+          <div class="fn-pill" style="background:${overdue.length?"#fef2f2":"#f1f5f9"};color:${overdue.length?"#dc2626":"#94a3b8"}">
+            <span>${overdue.length}</span><small>overdue</small>
+          </div>
+          <div class="fn-pill" style="background:${today.length?"#fff7ed":"#f1f5f9"};color:${today.length?"#ea580c":"#94a3b8"}">
+            <span>${today.length}</span><small>today</small>
+          </div>
+          <div class="fn-pill" style="background:${urgent.length?"#fef2f2":"#f1f5f9"};color:${urgent.length?"#dc2626":"#94a3b8"}">
+            <span>${urgent.length}</span><small>urgent</small>
+          </div>
+        </div>
+      </div>
+      <div class="forecast-bar-track">
+        <div class="forecast-bar-fill" style="width:${bar}%;background:${color}"></div>
+      </div>
+    </div>`;
+}
+
 // ── Load tasks ─────────────────────────────────────
 async function loadTasks(keepView = false) {
   try {
@@ -138,6 +208,7 @@ async function loadTasks(keepView = false) {
       else renderAdminDashboard();
       updateAdminStats();
     }
+    updateDayForecast();
   } else {
     renderStaffView();
   }
@@ -152,6 +223,7 @@ window.selectDepartment = function(d) {
   populateAssignSelect();
   renderAdminDashboard();
   updateAdminStats();
+  updateDayForecast();
 };
 
 window.selectUrgentView = function() {
@@ -160,6 +232,7 @@ window.selectUrgentView = function() {
   document.querySelector("[data-dept='urgent-view']")?.classList.add("active");
   renderUrgentView();
   updateAdminStats();
+  updateDayForecast();
 };
 
 function populateAssignSelect() {
@@ -497,6 +570,15 @@ window.openEditModal = function(id) {
   const t=allTasks.find(t=>t.id===id); if(!t) return;
   editId=id; editPri=t.priority||"p4";
   document.getElementById("editTask").value=t.title;
+
+  // Populate reassign dropdown with all staff in task's department
+  const reassignSel = document.getElementById("editAssignTo");
+  if (reassignSel) {
+    const deptStaff = employeesMap[t.department] || allStaff;
+    reassignSel.innerHTML = deptStaff.map(e =>
+      `<option value="${e}" ${e===t.assignedTo?"selected":""}>${e}</option>`
+    ).join("");
+  }
   const diff=diffDays(t);
   const presets=[0,1,2,3,5,7];
   const best=diff>=0?presets.reduce((a,b)=>Math.abs(b-diff)<Math.abs(a-diff)?b:a,0):0;
@@ -533,8 +615,11 @@ window.saveEdit=async function(){
   const due=new Date(); due.setHours(0,0,0,0); due.setDate(due.getDate()+days);
   const btn=document.querySelector(".modal-save");
   btn.textContent="Saving…"; btn.disabled=true;
+  const newAssignee = document.getElementById("editAssignTo")?.value || undefined;
   try{
-    await updateDoc(doc(db,"tasks",editId),{title,dueDate:due,priority:editPri,repeat});
+    const updatePayload = {title,dueDate:due,priority:editPri,repeat};
+    if (newAssignee) updatePayload.assignedTo = newAssignee;
+    await updateDoc(doc(db,"tasks",editId), updatePayload);
     showToast("Updated ✓","success");
     closeEditModal();
     await loadTasks(true);

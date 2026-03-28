@@ -25,16 +25,14 @@ body{
 
 /* ══ LOGIN ══════════════════════════════════════════ */
 .login-screen{
-  min-height:100vh;display:flex;align-items:flex-start;justify-content:center;
-  padding:32px 16px;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  padding:24px 16px;
   background:linear-gradient(160deg,#0f766e 0%,#0d9488 40%,#f0fdfa 100%);
 }
 .login-card{
   background:#fff;border-radius:20px;padding:32px 24px;
   box-shadow:0 20px 60px rgba(0,0,0,.15);width:100%;max-width:380px;
   text-align:center;
-  max-height:calc(100vh - 64px);
-  overflow-y:auto;
 }
 .login-logo{
   width:64px;height:64px;background:linear-gradient(135deg,var(--teal),var(--teal-d));
@@ -389,3 +387,73 @@ body{
 .toast.error{background:var(--red);}
 
 @media(min-width:481px){body{box-shadow:0 0 40px rgba(0,0,0,.1);}}
+
+/* ══ DAY FORECAST ══════════════════════════════════ */
+#dayForecast { padding: 10px 12px 0; }
+.forecast-card {
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 2px;
+}
+.forecast-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.forecast-icon {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.forecast-info {
+  flex: 1;
+  min-width: 0;
+}
+.forecast-mood {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.forecast-advice {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+.forecast-nums {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.fn-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 7px;
+  border-radius: 8px;
+  min-width: 36px;
+}
+.fn-pill span {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+}
+.fn-pill small {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-top: 1px;
+}
+.forecast-bar-track {
+  height: 5px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+.forecast-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .6s ease;
+}
