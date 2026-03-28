@@ -3,112 +3,117 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-  <title>TaskFlow – Office Manager</title>
+  <title>TaskFlow</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 
-<!-- ── TOP HEADER ─────────────────────────────────── -->
-<header class="app-header">
-  <div class="header-inner">
-    <div class="header-brand">
-      <span class="brand-icon">⚕</span>
-      <div>
-        <div class="brand-name">TaskFlow</div>
-        <div class="brand-sub">Office Manager</div>
-      </div>
+<!-- ═══════════════════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════════════════════ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">⚕</div>
+    <div class="login-title">Office TaskFlow</div>
+    <div class="login-sub">Select your name to continue</div>
+    <div class="login-names" id="loginNames">
+      <!-- populated by JS -->
     </div>
-    <div class="header-actions">
-      <button class="hdr-btn" onclick="toggleStats()" title="Stats">📊</button>
-      <button class="hdr-btn" onclick="exportTasks()" title="Export">📤</button>
-    </div>
-  </div>
-</header>
-
-<!-- ── STATS STRIP ─────────────────────────────────── -->
-<div class="stats-strip" id="statsStrip" style="display:none"></div>
-
-<!-- ── VIEW TABS: Dept / All Overdue+Today ─────────── -->
-<div class="dept-tabs-wrap">
-  <div class="dept-tabs" id="deptTabs">
-    <button class="dept-tab" data-dept="urgent-view" onclick="selectUrgentView()">🔴 Urgent View</button>
-    <button class="dept-tab active" data-dept="child" onclick="selectDepartment('child')">👶 Child</button>
-    <button class="dept-tab" data-dept="oral" onclick="selectDepartment('oral')">🦷 Oral</button>
-    <button class="dept-tab" data-dept="ci" onclick="selectDepartment('ci')">🔊 CI</button>
   </div>
 </div>
 
-<!-- ── ADD TASK BAR ───────────────────────────────── -->
-<div class="add-bar-wrap" id="addBarWrap">
-  <div class="add-bar">
-    <div class="add-row">
-      <input id="task" class="task-input" placeholder="Add a task…" onkeydown="if(event.key==='Enter')addTask()"/>
-      <button class="add-btn" onclick="addTask()" id="mainBtn">＋</button>
-    </div>
-    <div class="add-meta-row">
-      <select id="assignTo" class="mini-select">
-        <option value="">— Assign to —</option>
-      </select>
-      <select id="days" class="mini-select">
-        <option value="0">Today</option>
-        <option value="1">Tomorrow</option>
-        <option value="2">In 2 days</option>
-        <option value="3">In 3 days</option>
-        <option value="5">In 5 days</option>
-        <option value="7">In 1 week</option>
-      </select>
+<!-- ═══════════════════════════════════════════════════
+     MAIN APP  (hidden until login)
+════════════════════════════════════════════════════ -->
+<div class="app-screen" id="appScreen" style="display:none">
 
-      <!-- Repeat: select + custom days input -->
-      <div class="repeat-wrap">
-        <select id="repeat" class="mini-select" onchange="onRepeatChange(this)">
-          <option value="none">No repeat</option>
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="custom">Custom…</option>
-        </select>
-        <div class="custom-days-wrap" id="customDaysWrap" style="display:none">
-          <input id="customDays" type="number" min="1" max="365"
-            class="custom-days-input" placeholder="days"/>
-          <span class="custom-days-lbl">days</span>
+  <!-- ── HEADER ───────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-left">
+        <div class="header-avatar" id="headerAvatar"></div>
+        <div>
+          <div class="header-name" id="headerName"></div>
+          <div class="header-role" id="headerRole"></div>
         </div>
       </div>
+      <div class="header-right">
+        <!-- admin only -->
+        <button class="hdr-btn" id="exportBtn" onclick="exportTasks()" title="Export" style="display:none">📤</button>
+        <button class="hdr-btn logout-btn" onclick="logout()" title="Switch user">⇄</button>
+      </div>
+    </div>
+  </header>
 
-      <!-- Priority: uniform coloured pill buttons, no emoji shape issues -->
-      <div class="pri-group">
-        <button class="pri-chip p1-chip" id="p1" onclick="selectPriority('p1')" title="Urgent">U</button>
-        <button class="pri-chip p2-chip" id="p2" onclick="selectPriority('p2')" title="High">H</button>
-        <button class="pri-chip p3-chip" id="p3" onclick="selectPriority('p3')" title="Normal">N</button>
-        <button class="pri-chip p4-chip selected" id="p4" onclick="selectPriority('p4')" title="Low">L</button>
+  <!-- ── ADMIN: dept tabs + stats strip ───────────── -->
+  <div id="adminControls" style="display:none">
+    <div class="stats-strip" id="statsStrip"></div>
+    <div class="dept-tabs-wrap">
+      <div class="dept-tabs">
+        <button class="dept-tab" data-dept="urgent-view" onclick="selectUrgentView()">🔴 Urgent</button>
+        <button class="dept-tab active" data-dept="child" onclick="selectDepartment('child')">👶 Child</button>
+        <button class="dept-tab" data-dept="oral"  onclick="selectDepartment('oral')">🦷 Oral</button>
+        <button class="dept-tab" data-dept="ci"    onclick="selectDepartment('ci')">🔊 CI</button>
+      </div>
+    </div>
+
+    <!-- Add task bar (admin only) -->
+    <div class="add-bar-wrap">
+      <div class="add-row">
+        <input id="task" class="task-input" placeholder="Add a task…" onkeydown="if(event.key==='Enter')addTask()"/>
+        <button class="add-btn" onclick="addTask()" id="mainBtn">＋</button>
+      </div>
+      <div class="add-meta-row">
+        <select id="assignTo" class="mini-select">
+          <option value="">— Assign to —</option>
+        </select>
+        <select id="days" class="mini-select">
+          <option value="0">Today</option>
+          <option value="1">Tomorrow</option>
+          <option value="2">In 2 days</option>
+          <option value="3">In 3 days</option>
+          <option value="5">In 5 days</option>
+          <option value="7">In 1 week</option>
+        </select>
+        <div class="repeat-wrap">
+          <select id="repeat" class="mini-select" onchange="onRepeatChange(this)">
+            <option value="none">No repeat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <div class="custom-days-wrap" id="customDaysWrap" style="display:none">
+            <input id="customDays" type="number" min="1" max="365" class="custom-days-input" placeholder="n"/>
+            <span class="custom-days-lbl">days</span>
+          </div>
+        </div>
+        <div class="pri-group">
+          <button class="pri-chip p1-chip" id="p1" onclick="selectPriority('p1')" title="Urgent">U</button>
+          <button class="pri-chip p2-chip" id="p2" onclick="selectPriority('p2')" title="High">H</button>
+          <button class="pri-chip p3-chip" id="p3" onclick="selectPriority('p3')" title="Normal">N</button>
+          <button class="pri-chip p4-chip selected" id="p4" onclick="selectPriority('p4')" title="Low">L</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<!-- ── FILTER CHIPS ───────────────────────────────── -->
-<div class="filter-row" id="filterRow">
-  <button class="fchip active" onclick="setFilter('all',this)">All</button>
-  <button class="fchip" onclick="setFilter('pending',this)">Pending</button>
-  <button class="fchip" onclick="setFilter('overdue',this)">⚠ Overdue</button>
-  <button class="fchip" onclick="setFilter('completed',this)">Done</button>
-  <div class="filter-spacer"></div>
-  <select class="sort-select" onchange="setSortMode(this.value)">
-    <option value="priority">↕ Priority</option>
-    <option value="date">↕ Date</option>
-    <option value="name">↕ Name</option>
-  </select>
-</div>
-
-<!-- ── CARDS ──────────────────────────────────────── -->
-<div class="cards-list" id="dashboard">
-  <div class="loading-state">
-    <div class="spinner"></div>
-    <p>Loading tasks…</p>
+  <!-- ── STAFF: simple header strip ──────────────── -->
+  <div id="staffStrip" style="display:none">
+    <div class="staff-strip">
+      <div class="staff-strip-inner" id="staffStripInner"></div>
+    </div>
   </div>
-</div>
 
-<!-- ── EDIT MODAL ─────────────────────────────────── -->
+  <!-- ── DASHBOARD ────────────────────────────────── -->
+  <div class="cards-list" id="dashboard">
+    <div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>
+  </div>
+
+</div><!-- /appScreen -->
+
+<!-- ── EDIT MODAL (admin only) ──────────────────── -->
 <div class="modal-overlay" id="editModal" style="display:none" onclick="closeEditIfOutside(event)">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
@@ -116,12 +121,9 @@
     <input id="editTask" class="modal-input" placeholder="Task description"/>
     <div class="modal-row">
       <select id="editDays" class="mini-select flex1">
-        <option value="0">Today</option>
-        <option value="1">Tomorrow</option>
-        <option value="2">In 2 days</option>
-        <option value="3">In 3 days</option>
-        <option value="5">In 5 days</option>
-        <option value="7">In 1 week</option>
+        <option value="0">Today</option><option value="1">Tomorrow</option>
+        <option value="2">In 2 days</option><option value="3">In 3 days</option>
+        <option value="5">In 5 days</option><option value="7">In 1 week</option>
       </select>
       <div class="repeat-wrap flex1">
         <select id="editRepeat" class="mini-select" onchange="onEditRepeatChange(this)">
@@ -131,14 +133,11 @@
           <option value="custom">Custom…</option>
         </select>
         <div class="custom-days-wrap" id="editCustomDaysWrap" style="display:none">
-          <input id="editCustomDays" type="number" min="1" max="365"
-            class="custom-days-input" placeholder="days"/>
+          <input id="editCustomDays" type="number" min="1" max="365" class="custom-days-input" placeholder="n"/>
           <span class="custom-days-lbl">days</span>
         </div>
       </div>
     </div>
-
-    <!-- Priority pills in modal — same style -->
     <div class="modal-pri-label">Priority</div>
     <div class="modal-pri-row">
       <button class="mpri-btn p1-chip" id="ep1" onclick="selectEditPriority('p1')">🔴 Urgent</button>
@@ -146,15 +145,14 @@
       <button class="mpri-btn p3-chip" id="ep3" onclick="selectEditPriority('p3')">🔵 Normal</button>
       <button class="mpri-btn p4-chip" id="ep4" onclick="selectEditPriority('p4')">⚪ Low</button>
     </div>
-
     <div class="modal-actions">
       <button class="modal-cancel" onclick="closeEditModal()">Cancel</button>
-      <button class="modal-save" onclick="saveEdit()">Save Changes</button>
+      <button class="modal-save"   onclick="saveEdit()">Save Changes</button>
     </div>
   </div>
 </div>
 
-<!-- ── DELETE CONFIRM ─────────────────────────────── -->
+<!-- ── DELETE MODAL (admin only) ────────────────── -->
 <div class="modal-overlay" id="deleteModal" style="display:none">
   <div class="modal-sheet compact">
     <div class="modal-handle"></div>
@@ -162,15 +160,13 @@
     <div class="modal-title">Delete this task?</div>
     <p class="modal-sub">This cannot be undone.</p>
     <div class="modal-actions">
-      <button class="modal-cancel" onclick="closeDeleteModal()">Cancel</button>
+      <button class="modal-cancel"  onclick="closeDeleteModal()">Cancel</button>
       <button class="modal-del-btn" onclick="confirmDelete()">Delete</button>
     </div>
   </div>
 </div>
 
-<!-- ── TOAST ──────────────────────────────────────── -->
 <div class="toast" id="toast"></div>
-
 <script type="module" src="app.js"></script>
 </body>
 </html>
