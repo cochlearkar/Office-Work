@@ -111,6 +111,55 @@
     <div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>
   </div>
 
+  <!-- ── FAB: Add Task ──────────────────────────── -->
+  <button class="fab-add" onclick="openFabModal()" title="Add task">＋</button>
+
+  <!-- ── STAFF ADD MODAL ──────────────────────────── -->
+  <div class="modal-overlay" id="staffAddModal" style="display:none" onclick="closeFabIfOutside(event)">
+    <div class="modal-sheet" id="staffAddSheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">New Task</div>
+      <input id="fabTaskTitle" class="modal-input" placeholder="What needs to be done?" onkeydown="if(event.key==='Enter')submitFabTask()"/>
+      <div class="modal-row">
+        <select id="fabDays" class="mini-select" style="flex:1">
+          <option value="0">Due Today</option>
+          <option value="1">Tomorrow</option>
+          <option value="2">In 2 days</option>
+          <option value="3">In 3 days</option>
+          <option value="5">In 5 days</option>
+          <option value="7">In 1 week</option>
+        </select>
+        <select id="fabAssignTo" class="mini-select" style="flex:1;display:none"></select>
+      </div>
+      <div class="modal-pri-label">Priority</div>
+      <div class="modal-pri-row">
+        <button class="modal-pri-btn" id="fp1" onclick="setFabPri('p1')">🔴 Urgent</button>
+        <button class="modal-pri-btn" id="fp2" onclick="setFabPri('p2')">🟠 High</button>
+        <button class="modal-pri-btn" id="fp3" onclick="setFabPri('p3')">🔵 Normal</button>
+        <button class="modal-pri-btn selected" id="fp4" onclick="setFabPri('p4')">⚪ Low</button>
+      </div>
+      <div id="fabAdminExtra" style="display:none">
+        <div class="modal-pri-label">Assign to</div>
+        <select id="fabAdminAssign" class="modal-input" style="padding:10px 14px"></select>
+        <div class="modal-pri-label" style="margin-top:10px">Repeat</div>
+        <select id="fabRepeat" class="mini-select" style="width:100%;margin-bottom:4px" onchange="onFabRepeatChange(this)">
+          <option value="none">No repeat</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <div class="custom-days-wrap" id="fabCustomDaysWrap" style="display:none;margin-bottom:8px">
+          <input id="fabCustomDays" type="number" min="1" max="365" class="custom-days-input" placeholder="n"/>
+          <span class="custom-days-lbl">days</span>
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="modal-cancel" onclick="closeFabModal()">Cancel</button>
+        <button class="modal-save"   onclick="submitFabTask()" id="fabSaveBtn">Add Task</button>
+      </div>
+    </div>
+  </div>
+
 </div><!-- /appScreen -->
 
 <!-- ── EDIT MODAL (admin only) ──────────────────── -->

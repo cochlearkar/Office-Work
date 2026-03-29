@@ -839,3 +839,86 @@ function showToast(msg,type=""){
   toastEl.className="toast show "+(type||"");
   setTimeout(()=>toastEl.className="toast",2800);
 }
+
+// ── FAB: Add Task (all staff) ──────────────────────────────────────────────
+let fabPri = "p4";
+
+window.openFabModal = function() {
+  fabPri = "p4";
+  ["fp1","fp2","fp3","fp4"].forEach(id => document.getElementById(id)?.classList.remove("selected"));
+  document.getElementById("fp4")?.classList.add("selected");
+  document.getElementById("fabTaskTitle").value = "";
+  document.getElementById("fabDays").value = "0";
+  document.getElementById("fabRepeat") && (document.getElementById("fabRepeat").value = "none");
+  document.getElementById("fabCustomDaysWrap") && (document.getElementById("fabCustomDaysWrap").style.display = "none");
+
+  // Admin sees assign-to + repeat; staff sees their own name only
+  const adminExtra = document.getElementById("fabAdminExtra");
+  if (isAdmin) {
+    adminExtra.style.display = "block";
+    const sel = document.getElementById("fabAdminAssign");
+    sel.innerHTML = allStaff.map(e => `<option value="${e}">${e}</option>`).join("");
+  } else {
+    adminExtra.style.display = "none";
+  }
+
+  document.getElementById("staffAddModal").style.display = "flex";
+  setTimeout(() => document.getElementById("fabTaskTitle").focus(), 100);
+};
+
+window.closeFabModal = function() {
+  document.getElementById("staffAddModal").style.display = "none";
+};
+
+window.closeFabIfOutside = function(e) {
+  if (e.target === document.getElementById("staffAddModal")) closeFabModal();
+};
+
+window.setFabPri = function(p) {
+  fabPri = p;
+  ["fp1","fp2","fp3","fp4"].forEach(id => document.getElementById(id)?.classList.remove("selected"));
+  document.getElementById("f"+p)?.classList.add("selected");
+};
+
+window.onFabRepeatChange = function(sel) {
+  document.getElementById("fabCustomDaysWrap").style.display = sel.value === "custom" ? "flex" : "none";
+};
+
+window.submitFabTask = async function() {
+  const title = document.getElementById("fabTaskTitle").value.trim();
+  if (!title) { showToast("Enter a task", "error"); return; }
+
+  const days = parseInt(document.getElementById("fabDays").value) || 0;
+  const due  = new Date(); due.setHours(0,0,0,0); due.setDate(due.getDate() + days);
+
+  let assignedTo, department, repeat = "none";
+  if (isAdmin) {
+    assignedTo = document.getElementById("fabAdminAssign").value;
+    // derive dept from current tab
+    department = urgentView ? "child" : currentDept;
+    const repeatSel = document.getElementById("fabRepeat").value;
+    if (repeatSel === "custom") {
+      repeat = document.getElementById("fabCustomDays").value || "none";
+    } else {
+      repeat = repeatSel;
+    }
+  } else {
+    assignedTo = currentUser;
+    // pick first dept this user belongs to
+    department = Object.entries(employeesMap).find(([,arr]) => arr.includes(currentUser))?.[0] || "child";
+  }
+
+  const btn = document.getElementById("fabSaveBtn");
+  btn.textContent = "…"; btn.disabled = true;
+  try {
+    await addDoc(collection(db,"tasks"), {
+      title, assignedTo, department,
+      dueDate: due, priority: fabPri,
+      repeat, status: "pending", createdAt: new Date()
+    });
+    closeFabModal();
+    showToast("Task added ✓", "success");
+    await loadTasks(true);
+  } catch(e) { showToast("Error saving", "error"); }
+  btn.textContent = "Add Task"; btn.disabled = false;
+};
