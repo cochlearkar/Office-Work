@@ -1114,3 +1114,4 @@ window.chatKeydown = function(e) {
     sendChatMessage();
   }
 };
+
