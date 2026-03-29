@@ -536,21 +536,28 @@ body{
 }
 
 /* ══ SECTION BLOCKS — card-like with solid header ═══════════════════ */
+.mts-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
 .mts-sec-header {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  margin-top: 12px;
-  border-radius: 10px 10px 0 0;
-  margin-bottom: 0;
+  border-radius: 0;
+  margin: 0;
+  flex-shrink: 0;
 }
 .mts-block {
   background: #fff;
   border-left: 3px solid #e2e8f0;
   border-right: 1px solid #e2e8f0;
   border-bottom: 1.5px solid #e2e8f0;
-  border-radius: 0 0 10px 10px;
+  border-radius: 0;
   margin-bottom: 4px;
   overflow: hidden;
 }
