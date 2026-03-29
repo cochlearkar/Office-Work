@@ -143,7 +143,7 @@ window.logout = function() {
 };
 
 
-// ── Forecast banner + Top 3 Urgent (rendered at top of dashboard) ────
+// ── Forecast banner + Top 3 Urgent ────────────────
 function buildForecastBanner() {
   const active  = allTasks.filter(t => t.status !== "completed");
   const overdue = active.filter(t => diffDays(t) < 0);
@@ -158,21 +158,15 @@ function buildForecastBanner() {
   else if (score <= 12)  { icon="🌧️"; mood="Heavy Load";        color="#ea580c"; bg="#fff7ed"; }
   else                   { icon="⛈️"; mood="Storm — Critical";  color="#dc2626"; bg="#fef2f2"; }
 
-  const pill = (n, label, activeColor, activeBg) => `
-    <div class="fc-pill" style="background:${n>0?activeBg:"#f1f5f9"};color:${n>0?activeColor:"#94a3b8"}">
-      <span class="fc-pnum">${n}</span>
-      <span class="fc-plbl">${label}</span>
-    </div>`;
+  const pill = (n, lbl, ac, ab) => `<div class="fc-pill" style="background:${n>0?ab:"#f1f5f9"};color:${n>0?ac:"#94a3b8"}">
+    <span class="fc-pnum">${n}</span><span class="fc-plbl">${lbl}</span></div>`;
 
-  return `<div class="fc-banner" style="background:${bg};border-bottom:2px solid ${color}20">
-    <div class="fc-left">
-      <span class="fc-icon">${icon}</span>
-      <div class="fc-mood" style="color:${color}">${mood}</div>
-    </div>
+  return `<div class="fc-banner" style="background:${bg};border-bottom:2px solid ${color}30">
+    <div class="fc-left"><span class="fc-icon">${icon}</span><div class="fc-mood" style="color:${color}">${mood}</div></div>
     <div class="fc-pills">
-      ${pill(overdue.length, "Overdue", "#dc2626", "#fef2f2")}
-      ${pill(today.length,   "Today",   "#ea580c", "#fff7ed")}
-      ${pill(urgent.length,  "Urgent",  "#dc2626", "#fef2f2")}
+      ${pill(overdue.length,"Overdue","#dc2626","#fef2f2")}
+      ${pill(today.length,  "Today",  "#ea580c","#fff7ed")}
+      ${pill(urgent.length, "Urgent", "#dc2626","#fef2f2")}
     </div>
   </div>`;
 }
@@ -182,9 +176,7 @@ function buildTop3Urgent() {
     .filter(t => t.priority === "p1" && t.status !== "completed")
     .sort((a, b) => safeDate(a.dueDate) - safeDate(b.dueDate))
     .slice(0, 3);
-
   if (!top3.length) return "";
-
   const rows = top3.map((t, i) => {
     const diff    = diffDays(t);
     const daysLbl = diff < 0 ? `${Math.abs(diff)}d overdue` : diff === 0 ? "Due today" : `Due in ${diff}d`;
@@ -194,17 +186,14 @@ function buildTop3Urgent() {
       <div class="up-content">
         <div class="up-title">${t.title}</div>
         <div class="up-meta">
-          <span class="up-who">👤 ${t.assignedTo || "—"}</span>
+          <span class="up-who">👤 ${t.assignedTo||"—"}</span>
           <span class="up-chip ${chipCls}">${daysLbl}</span>
         </div>
-      </div>
-    </div>`;
+      </div></div>`;
   }).join("");
-
   return `<div class="up-wrap">
     <div class="up-header">🔴 Top ${top3.length} Urgent</div>
-    <div class="up-list">${rows}</div>
-  </div>`;
+    <div class="up-list">${rows}</div></div>`;
 }
 
 // ── Load tasks ─────────────────────────────────────
@@ -413,94 +402,112 @@ function renderUrgentView() {
 
 // ── STAFF VIEW ─────────────────────────────────────
 function renderStaffView() {
-  dashboard.innerHTML = buildForecastBanner() + buildTop3Urgent();
-
-  const myTasks = allTasks.filter(t=>t.assignedTo===currentUser);
-  const pending = myTasks.filter(t=>t.status!=="completed");
-  const overdue = pending.filter(t=>diffDays(t)<0);
-  const todayT  = pending.filter(t=>diffDays(t)===0);
-  const done    = myTasks.filter(t=>t.status==="completed");
+  const myTasks = allTasks.filter(t => t.assignedTo === currentUser);
+  const pending = myTasks.filter(t => t.status !== "completed");
+  const pOver   = pending.filter(t => diffDays(t) < 0);
+  const pToday  = pending.filter(t => diffDays(t) === 0);
+  const done    = myTasks.filter(t => t.status === "completed");
 
   // Staff strip stats
   document.getElementById("staffStripInner").innerHTML = `
     <div class="sstrip-pill sp-pending">
-      <div class="snum">${pending.length}</div>
-      <div class="slbl">Pending</div>
+      <div class="snum">${pending.length}</div><div class="slbl">Pending</div>
     </div>
-    ${overdue.length ? `<div class="sstrip-pill" style="background:var(--red-l)">
-      <div class="snum" style="color:var(--red)">${overdue.length}</div>
-      <div class="slbl" style="color:#b91c1c">Overdue</div>
-    </div>` : ""}
-    ${todayT.length ? `<div class="sstrip-pill" style="background:var(--amber-l)">
-      <div class="snum" style="color:var(--amber)">${todayT.length}</div>
-      <div class="slbl" style="color:#92400e">Due Today</div>
-    </div>` : ""}
+    ${pOver.length ? `<div class="sstrip-pill" style="background:var(--red-l)">
+      <div class="snum" style="color:var(--red)">${pOver.length}</div>
+      <div class="slbl" style="color:#b91c1c">Overdue</div></div>` : ""}
+    ${pToday.length ? `<div class="sstrip-pill" style="background:var(--amber-l)">
+      <div class="snum" style="color:var(--amber)">${pToday.length}</div>
+      <div class="slbl" style="color:#92400e">Due Today</div></div>` : ""}
     <div class="sstrip-pill sp-done">
-      <div class="snum">${done.length}</div>
-      <div class="slbl">Done</div>
+      <div class="snum">${done.length}</div><div class="slbl">Done</div>
     </div>`;
 
-  if(!pending.length && !done.length) {
-    dashboard.innerHTML = `<div class="empty-state">
-      <div class="empty-icon">🎉</div>
-      <h3>All done!</h3>
-      <p>You have no tasks assigned right now.</p>
-    </div>`;
+  // Build HTML: forecast + top3 first
+  let html = buildForecastBanner() + buildTop3Urgent();
+
+  if (!pending.length && !done.length) {
+    html += `<div class="empty-state">
+      <div class="empty-icon">🎉</div><h3>All done!</h3>
+      <p>No tasks assigned right now.</p></div>`;
+    dashboard.innerHTML = html;
     return;
   }
 
-  // Show in urgency order: overdue → today → tomorrow → upcoming → done
-  const buckets = bucket(myTasks);
-  const order   = ["overdue","today","tomorrow","upcoming","completed"];
-  const secConfig = {
-    overdue:  { label:"⚠ Overdue — Action Needed", dot:"dot-overdue"  },
-    today:    { label:"📋 Due Today",               dot:"dot-today"    },
-    tomorrow: { label:"📅 Due Tomorrow",            dot:"dot-tomorrow" },
-    upcoming: { label:"🗓 Upcoming",                dot:"dot-upcoming" },
-    completed:{ label:"✅ Completed",               dot:"dot-done"     }
-  };
+  // ── "Your Tasks" name header ───────────────────────────
+  const color    = avatarColors[allStaff.indexOf(currentUser) % avatarColors.length];
+  const initials = currentUser.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
+  html += `<div class="my-tasks-hdr">
+    <div class="my-tasks-av" style="background:${color}">${initials}</div>
+    <div>
+      <div class="my-tasks-name">${currentUser}</div>
+      <div class="my-tasks-sub">${pending.length} pending · ${done.length} done</div>
+    </div>
+  </div>`;
 
-  order.forEach(sec => {
-    const list = sortByPriority(buckets[sec]);
-    if(!list.length) return;
+  // ── Section definitions ─────────────────────────────────
+  const sections = [
+    {
+      key:"overdue",   icon:"⚠️",  label:"Overdue",
+      accent:"#dc2626", bg:"#fff5f5", border:"#fca5a5",
+      tasks: sortByPriority(pending.filter(t => diffDays(t) < 0)),
+      due: t => `${Math.abs(diffDays(t))}d overdue`,
+      dueCls: "tsr-badge-over"
+    },
+    {
+      key:"today",     icon:"📋",  label:"Today's Tasks",
+      accent:"#b45309", bg:"#fffbeb", border:"#fcd34d",
+      tasks: sortByPriority(pending.filter(t => diffDays(t) === 0)),
+      due: () => "Due today", dueCls: "tsr-badge-today"
+    },
+    {
+      key:"tomorrow",  icon:"📅",  label:"Tomorrow's Tasks",
+      accent:"#0369a1", bg:"#f0f9ff", border:"#7dd3fc",
+      tasks: sortByPriority(pending.filter(t => diffDays(t) === 1)),
+      due: () => "Tomorrow", dueCls: "tsr-badge-tmrw"
+    },
+    {
+      key:"upcoming",  icon:"🗓",  label:"Upcoming",
+      accent:"#059669", bg:"#f0fdf4", border:"#6ee7b7",
+      tasks: sortByPriority(pending.filter(t => diffDays(t) > 1)),
+      due: t => { const d=safeDate(t.dueDate); return d.toLocaleDateString("en-IN",{day:"numeric",month:"short"}); },
+      dueCls: "tsr-badge-up"
+    },
+    {
+      key:"completed", icon:"✅",  label:"Completed",
+      accent:"#64748b", bg:"#f8fafc", border:"#e2e8f0",
+      tasks: done,
+      due: null, dueCls: ""
+    }
+  ];
 
-    const lbl = document.createElement("div");
-    lbl.className = "sec-label";
-    lbl.innerHTML = `<span class="sec-dot ${secConfig[sec].dot}"></span>${secConfig[sec].label}`;
-    dashboard.appendChild(lbl);
+  sections.forEach(sec => {
+    if (!sec.tasks.length) return;
+    const rows = sec.tasks.map(t => {
+      const badge = sec.due ? `<span class="tsr-badge ${sec.dueCls}">${sec.due(t)}</span>` : "";
+      const rep   = t.repeat && t.repeat!=="none"
+        ? `<span class="tsr-repeat">${repeatText(t.repeat)}</span>` : "";
+      const doneCls = t.status==="completed" ? " tsr-row-done" : "";
+      return `<div class="tsr-row${doneCls}">
+        <div class="tsr-dot" style="background:${sec.accent}"></div>
+        <div class="tsr-title">${t.title}</div>
+        <div class="tsr-right">${badge}${rep}</div>
+      </div>`;
+    }).join("");
 
-    list.forEach(t => {
-      const card = buildStaffCard(t);
-      dashboard.appendChild(card);
-    });
-  });
-}
-
-function buildStaffCard(t) {
-  const done    = t.status==="completed";
-  const diff    = diffDays(t);
-  const priCls  = priDotClass[t.priority||"p4"];
-  const dueInfo = dueChip(diff, done);
-  const rep     = t.repeat&&t.repeat!=="none" ? repeatText(t.repeat) : "";
-  const cc      = cardClass(diff, done);
-
-  const card = document.createElement("div");
-  card.className = `staff-task-card ${cc}`;
-
-  card.innerHTML = `
-    <div class="stc-body">
-      <div class="stc-pri ${priCls}">${priText[t.priority||"p4"]}</div>
-      <div class="stc-main">
-        <div class="stc-title">${t.title}</div>
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;">
-          <span class="stc-due ${dueInfo.cls}">${dueInfo.txt}</span>
-          ${rep ? `<span class="stc-repeat">${rep}</span>` : ""}
-        </div>
+    html += `<div class="ts-section" style="border:1.5px solid ${sec.border};border-radius:14px;margin:10px 12px 0;overflow:hidden">
+      <div class="ts-head" style="background:${sec.bg};border-bottom:1.5px solid ${sec.border}">
+        <span class="ts-head-icon">${sec.icon}</span>
+        <span class="ts-head-label" style="color:${sec.accent}">${sec.label}</span>
+        <span class="ts-head-count" style="background:${sec.border};color:${sec.accent}">${sec.tasks.length}</span>
       </div>
+      <div class="ts-body">${rows}</div>
     </div>`;
-  return card;
-}
+  });
 
+  html += '<div style="height:20px"></div>';
+  dashboard.innerHTML = html;
+}
 // ── Admin actions ──────────────────────────────────
 window.selectPriority = function(p) {
   selectedPri = p;
