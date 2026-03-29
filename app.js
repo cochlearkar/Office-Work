@@ -498,17 +498,17 @@ function renderStaffView() {
   sections.forEach(sec => {
     if (!sec.tasks.length) return;
     const card = document.createElement("div");
-    card.className = "mts-card";
+    card.className = `mts-card mts-card-${sec.key}`;
     const hdr = document.createElement("div");
     hdr.className = "mts-sec-header";
-    hdr.style.cssText = `background:${sec.bg};border-left:4px solid ${sec.accent};`;
+    hdr.style.cssText = `background:${sec.bg};`;
     hdr.innerHTML = `<span class="mts-sec-icon">${sec.icon}</span>
       <span class="mts-sec-label" style="color:${sec.accent}">${sec.label}</span>
       <span class="mts-sec-count" style="background:${sec.accent}20;color:${sec.accent}">${sec.tasks.length}</span>`;
     card.appendChild(hdr);
     const block = document.createElement("div");
     block.className = "mts-block";
-    block.style.borderColor = sec.border;
+
     block.innerHTML = sec.tasks.map(sec.rowFn).join("");
     card.appendChild(block);
     dashboard.appendChild(card);

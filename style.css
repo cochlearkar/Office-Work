@@ -483,11 +483,11 @@ body{
 .mth-avatar { width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,.25); color:#fff; font-size:14px; font-weight:900; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .mth-name   { font-size:15px; font-weight:900; color:#fff; }
 .mth-sub    { font-size:11px; color:rgba(255,255,255,.75); margin-top:2px; font-weight:600; }
-.mts-sec-header { display:flex; align-items:center; gap:8px; padding:9px 14px; margin-top:8px; margin-bottom:0; }
+.mts-sec-header { display:flex; align-items:center; gap:8px; padding:9px 14px; margin:0; }
 .mts-sec-icon   { font-size:15px; flex-shrink:0; }
 .mts-sec-label  { font-size:12px; font-weight:800; flex:1; }
 .mts-sec-count  { font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px; }
-.mts-block      { background:#fff; border-left:3px solid #e2e8f0; border-bottom:1.5px solid #e2e8f0; margin-bottom:2px; margin-top:0; }
+.mts-block      { background:#fff; margin:0; }
 .mts-row        { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 14px; border-bottom:1px solid #f1f5f9; }
 .mts-row:last-child { border-bottom:none; }
 .mts-title      { font-size:13px; font-weight:700; color:#0f172a; flex:1; min-width:0; line-height:1.35; }
@@ -498,11 +498,11 @@ body{
 .mts-badge-tmrw  { background:#f0f9ff; color:#0ea5e9; }
 .mts-badge-up    { background:#f0fdf4; color:#059669; }
 .mts-badge-done  { background:#f8fafc; color:#94a3b8; }
-.mts-row-over  { border-left:3px solid #dc2626; }
-.mts-row-today { border-left:3px solid #d97706; }
-.mts-row-tmrw  { border-left:3px solid #0ea5e9; }
-.mts-row-up    { border-left:3px solid #059669; }
-.mts-row-done  { border-left:3px solid #cbd5e1; }
+.mts-row-over  { }
+.mts-row-today { }
+.mts-row-tmrw  { }
+.mts-row-up    { }
+.mts-row-done  { }
 
 /* ══ PRIORITY CHIP inside staff task rows ═══════════════════════════ */
 .mts-pri-chip {
@@ -539,26 +539,27 @@ body{
 .mts-card {
   display: flex;
   flex-direction: column;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  border: 1.5px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
 }
+.mts-card-overdue  { border-color: #fecaca; }
+.mts-card-today    { border-color: #fde68a; }
+.mts-card-tomorrow { border-color: #bae6fd; }
+.mts-card-upcoming { border-color: #bbf7d0; }
+.mts-card-completed{ border-color: #e2e8f0; }
 .mts-sec-header {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-radius: 0;
   margin: 0;
   flex-shrink: 0;
 }
 .mts-block {
   background: #fff;
-  border-left: 3px solid #e2e8f0;
-  border-right: 1px solid #e2e8f0;
-  border-bottom: 1.5px solid #e2e8f0;
-  border-radius: 0;
-  margin-bottom: 4px;
+  margin: 0;
   overflow: hidden;
 }
 
