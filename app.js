@@ -55,20 +55,17 @@ function buildLoginScreen() {
   const adminDiv = createNameBtn(ADMIN, true);
   loginNames.appendChild(adminDiv);
 
-  // Staff by dept — CI shares same staff as Child, show once
+  // Staff by dept — CI shares staff with Child, show once
   const shownStaff = new Set();
   Object.entries(employeesMap).forEach(([dept, emps]) => {
-    if (dept === "ci") return;          // skip — same people as Child
+    if (dept === "ci") return;
     const label = document.createElement("div");
     label.className = "login-dept-label";
-    label.textContent = dept === "child"
-      ? "Child Health & Cochlear Implant"
-      : deptNames[dept];
+    label.textContent = dept === "child" ? "Child Health & Cochlear Implant" : deptNames[dept];
     loginNames.appendChild(label);
     emps.filter(e => e !== ADMIN && !shownStaff.has(e)).forEach(emp => {
       shownStaff.add(emp);
-      const btn = createNameBtn(emp, false, dept);
-      loginNames.appendChild(btn);
+      loginNames.appendChild(createNameBtn(emp, false, dept));
     });
   });
 }
@@ -91,21 +88,17 @@ function createNameBtn(name, admin, dept) {
 }
 
 
-// ── Admin PIN ──────────────────────────────────────────────────────────
-const ADMIN_PIN = "1234";  // ← Change this to your preferred PIN
+// ── Admin PIN ──────────────────────────────────────
+const ADMIN_PIN = "1234";  // ← change to your preferred PIN
 
 function promptAdminPin() {
-  const ov = document.getElementById("pinOverlay");
-  const inp = document.getElementById("pinInput");
-  const err = document.getElementById("pinError");
-  ov.style.display = "flex";
-  inp.value = "";
-  err.style.display = "none";
-  setTimeout(() => inp.focus(), 120);
+  document.getElementById("pinOverlay").style.display = "flex";
+  document.getElementById("pinInput").value = "";
+  document.getElementById("pinError").style.display = "none";
+  setTimeout(() => document.getElementById("pinInput").focus(), 100);
 }
 window.submitAdminPin = function() {
-  const entered = document.getElementById("pinInput").value.trim();
-  if (entered === ADMIN_PIN) {
+  if (document.getElementById("pinInput").value.trim() === ADMIN_PIN) {
     document.getElementById("pinOverlay").style.display = "none";
     loginAs(ADMIN);
   } else {
@@ -150,51 +143,41 @@ window.logout = function() {
 };
 
 
-// ── Forecast + Urgent panel (shown after login, top of dashboard) ──────
-function buildForecastPanel() {
-  const active   = allTasks.filter(t => t.status !== "completed");
-  const overdue  = active.filter(t => diffDays(t) < 0);
-  const today    = active.filter(t => diffDays(t) === 0);
-  const urgent   = active.filter(t => t.priority === "p1");
-  const tomorrow = active.filter(t => diffDays(t) === 1);
-  const score    = overdue.length * 3 + urgent.length * 2 + today.length;
+// ── Forecast banner + Top 3 Urgent (rendered at top of dashboard) ────
+function buildForecastBanner() {
+  const active  = allTasks.filter(t => t.status !== "completed");
+  const overdue = active.filter(t => diffDays(t) < 0);
+  const today   = active.filter(t => diffDays(t) === 0);
+  const urgent  = active.filter(t => t.priority === "p1");
+  const score   = overdue.length * 3 + urgent.length * 2 + today.length;
 
-  let icon, mood, color, bg, barPct, advice;
-  if      (score === 0)  { icon="☀️";  mood="Clear Day";          color="#059669"; bg="#f0fdf4"; barPct=4;   advice="All caught up — no urgent tasks pending."; }
-  else if (score <= 3)   { icon="🌤️"; mood="Light Load";         color="#0d9488"; bg="#f0fdfa"; barPct=22;  advice=`${today.length} task${today.length!==1?"s":""} due today. Manageable day.`; }
-  else if (score <= 7)   { icon="⛅";  mood="Moderate Pressure";  color="#d97706"; bg="#fffbeb"; barPct=52;  advice=`${today.length} due today · ${overdue.length} overdue. Stay focused.`; }
-  else if (score <= 12)  { icon="🌧️"; mood="Heavy Load";         color="#ea580c"; bg="#fff7ed"; barPct=76;  advice=`${overdue.length} overdue + ${urgent.length} urgent. Prioritise now.`; }
-  else                   { icon="⛈️"; mood="Storm — Critical";   color="#dc2626"; bg="#fef2f2"; barPct=100; advice=`${overdue.length} overdue & ${urgent.length} urgent — immediate action!`; }
+  let icon, mood, color, bg;
+  if      (score === 0)  { icon="☀️";  mood="Clear Day";         color="#059669"; bg="#ecfdf5"; }
+  else if (score <= 3)   { icon="🌤️"; mood="Light Load";        color="#0d9488"; bg="#f0fdfa"; }
+  else if (score <= 7)   { icon="⛅";  mood="Moderate Pressure"; color="#d97706"; bg="#fffbeb"; }
+  else if (score <= 12)  { icon="🌧️"; mood="Heavy Load";        color="#ea580c"; bg="#fff7ed"; }
+  else                   { icon="⛈️"; mood="Storm — Critical";  color="#dc2626"; bg="#fef2f2"; }
 
-  const tmNote = tomorrow.length
-    ? `<div style="font-size:10px;color:#64748b;margin-top:4px;font-weight:600">📅 Tomorrow: ${tomorrow.length} task${tomorrow.length!==1?"s":""} coming up</div>`
-    : "";
+  const pill = (n, label, activeColor, activeBg) => `
+    <div class="fc-pill" style="background:${n>0?activeBg:"#f1f5f9"};color:${n>0?activeColor:"#94a3b8"}">
+      <span class="fc-pnum">${n}</span>
+      <span class="fc-plbl">${label}</span>
+    </div>`;
 
-  return `<div class="fp-card" style="background:${bg}">
-    <div class="fp-top">
-      <span class="fp-icon">${icon}</span>
-      <div class="fp-body">
-        <div class="fp-mood" style="color:${color}">${mood}</div>
-        <div class="fp-advice">${advice}</div>
-        ${tmNote}
-      </div>
-      <div class="fp-pills">
-        <div class="fp-pill" style="background:${overdue.length?"#fef2f2":"#f1f5f9"};color:${overdue.length?"#dc2626":"#94a3b8"}">
-          <span class="fp-pnum">${overdue.length}</span><span class="fp-plbl">overdue</span>
-        </div>
-        <div class="fp-pill" style="background:${today.length?"#fff7ed":"#f1f5f9"};color:${today.length?"#ea580c":"#94a3b8"}">
-          <span class="fp-pnum">${today.length}</span><span class="fp-plbl">today</span>
-        </div>
-        <div class="fp-pill" style="background:${urgent.length?"#fef2f2":"#f1f5f9"};color:${urgent.length?"#dc2626":"#94a3b8"}">
-          <span class="fp-pnum">${urgent.length}</span><span class="fp-plbl">urgent</span>
-        </div>
-      </div>
+  return `<div class="fc-banner" style="background:${bg};border-bottom:2px solid ${color}20">
+    <div class="fc-left">
+      <span class="fc-icon">${icon}</span>
+      <div class="fc-mood" style="color:${color}">${mood}</div>
     </div>
-    <div class="fp-bar-track"><div class="fp-bar-fill" style="width:${barPct}%;background:${color}"></div></div>
+    <div class="fc-pills">
+      ${pill(overdue.length, "Overdue", "#dc2626", "#fef2f2")}
+      ${pill(today.length,   "Today",   "#ea580c", "#fff7ed")}
+      ${pill(urgent.length,  "Urgent",  "#dc2626", "#fef2f2")}
+    </div>
   </div>`;
 }
 
-function buildUrgentPanel() {
+function buildTop3Urgent() {
   const top3 = allTasks
     .filter(t => t.priority === "p1" && t.status !== "completed")
     .sort((a, b) => safeDate(a.dueDate) - safeDate(b.dueDate))
@@ -211,8 +194,7 @@ function buildUrgentPanel() {
       <div class="up-content">
         <div class="up-title">${t.title}</div>
         <div class="up-meta">
-          <span class="up-who">👤 ${t.assignedTo||"—"}</span>
-          <span class="up-dept">${deptNames[t.department]||t.department||""}</span>
+          <span class="up-who">👤 ${t.assignedTo || "—"}</span>
           <span class="up-chip ${chipCls}">${daysLbl}</span>
         </div>
       </div>
@@ -220,7 +202,7 @@ function buildUrgentPanel() {
   }).join("");
 
   return `<div class="up-wrap">
-    <div class="up-header">🔴 Top ${top3.length} Urgent — Needs Immediate Attention</div>
+    <div class="up-header">🔴 Top ${top3.length} Urgent</div>
     <div class="up-list">${rows}</div>
   </div>`;
 }
@@ -297,7 +279,7 @@ function updateAdminStats() {
 
 // ── Admin: normal dept view ────────────────────────
 function renderAdminDashboard() {
-  dashboard.innerHTML = buildForecastPanel() + buildUrgentPanel();
+  dashboard.innerHTML = buildForecastBanner() + buildTop3Urgent();
   const emps    = employeesMap[currentDept];
   const deptAll = allTasks.filter(t=>t.department===currentDept);
 
@@ -376,7 +358,7 @@ function buildAdminTaskRow(t) {
 
 // ── Admin: Urgent view (cross-dept overdue + today) ─
 function renderUrgentView() {
-  dashboard.innerHTML = buildForecastPanel();
+  dashboard.innerHTML = buildForecastBanner();
   const urgent = allTasks.filter(t=>t.status!=="completed"&&diffDays(t)<=0);
 
   if(!urgent.length) {
@@ -431,7 +413,7 @@ function renderUrgentView() {
 
 // ── STAFF VIEW ─────────────────────────────────────
 function renderStaffView() {
-  dashboard.innerHTML = buildForecastPanel() + buildUrgentPanel();
+  dashboard.innerHTML = buildForecastBanner() + buildTop3Urgent();
 
   const myTasks = allTasks.filter(t=>t.assignedTo===currentUser);
   const pending = myTasks.filter(t=>t.status!=="completed");
@@ -605,11 +587,10 @@ window.openEditModal = function(id) {
   const t=allTasks.find(t=>t.id===id); if(!t) return;
   editId=id; editPri=t.priority||"p4";
   document.getElementById("editTask").value=t.title;
-  // Populate reassign dropdown
   const reSel = document.getElementById("editAssignTo");
   if (reSel) {
-    const deptStaff = employeesMap[t.department] || allStaff;
-    reSel.innerHTML = deptStaff.map(e =>
+    const staff = employeesMap[t.department] || allStaff;
+    reSel.innerHTML = staff.map(e =>
       `<option value="${e}" ${e===t.assignedTo?"selected":""}>${e}</option>`
     ).join("");
   }

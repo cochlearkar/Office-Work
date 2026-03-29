@@ -169,7 +169,7 @@
 </div>
 
 
-<!-- ── ADMIN PIN OVERLAY ──────────────────────────────────────────── -->
+<!-- ── ADMIN PIN OVERLAY ──────────────────── -->
 <div id="pinOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:24px">
   <div style="background:#fff;border-radius:20px;padding:32px 28px;width:100%;max-width:310px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.3)">
     <div style="font-size:36px;margin-bottom:10px">🔐</div>
@@ -177,20 +177,14 @@
     <div style="font-size:12px;color:#64748b;margin-bottom:22px;font-weight:600">Enter PIN to sign in as Dr Basavaraj</div>
     <input id="pinInput" type="password" inputmode="numeric" maxlength="6"
       placeholder="· · · ·"
-      style="width:100%;padding:14px 16px;border:2px solid #e2e8f0;border-radius:12px;font-size:22px;text-align:center;letter-spacing:8px;font-family:inherit;font-weight:800;outline:none;margin-bottom:10px;transition:border-color .2s"
+      style="width:100%;padding:14px;border:2px solid #e2e8f0;border-radius:12px;font-size:22px;text-align:center;letter-spacing:8px;font-weight:800;outline:none;margin-bottom:10px;transition:border-color .2s;font-family:inherit"
       onfocus="this.style.borderColor='#0d9488'"
       onblur="this.style.borderColor='#e2e8f0'"
       onkeydown="if(event.key==='Enter')submitAdminPin()"/>
     <div id="pinError" style="display:none;background:#fef2f2;color:#dc2626;font-size:12px;font-weight:700;padding:8px 12px;border-radius:8px;margin-bottom:14px">❌ Incorrect PIN. Try again.</div>
     <div style="display:flex;gap:10px">
-      <button onclick="cancelAdminPin()"
-        style="flex:1;padding:12px;border:2px solid #e2e8f0;border-radius:10px;background:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">
-        Cancel
-      </button>
-      <button onclick="submitAdminPin()"
-        style="flex:1;padding:12px;border:none;border-radius:10px;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
-        Sign In →
-      </button>
+      <button onclick="cancelAdminPin()" style="flex:1;padding:12px;border:2px solid #e2e8f0;border-radius:10px;background:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">Cancel</button>
+      <button onclick="submitAdminPin()" style="flex:1;padding:12px;border:none;border-radius:10px;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Sign In →</button>
     </div>
   </div>
 </div>

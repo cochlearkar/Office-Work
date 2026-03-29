@@ -390,55 +390,66 @@ body{
 
 @media(min-width:481px){body{box-shadow:0 0 40px rgba(0,0,0,.1);}}
 
-/* ══ FORECAST PANEL (post-login dashboard top) ═══════════ */
-.fp-card {
-  border-radius: 14px;
-  padding: 14px 16px 10px;
-  margin: 12px 12px 0;
+/* ══ FORECAST BANNER ════════════════════════════════════════════════ */
+.fc-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  /* full bleed — no margin, touches both edges */
+  width: 100%;
+  gap: 10px;
+  flex-shrink: 0;
 }
-.fp-top {
+.fc-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.fc-icon { font-size: 26px; line-height: 1; }
+.fc-mood { font-size: 12px; font-weight: 800; white-space: nowrap; }
+.fc-pills {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.fc-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 10px;
+  min-width: 52px;
+}
+.fc-pnum { font-size: 18px; font-weight: 900; line-height: 1; }
+.fc-plbl {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-top: 2px;
+}
+
+/* ══ TOP 3 URGENT ════════════════════════════════════════════════════ */
+.up-wrap { margin: 0; }
+.up-header {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #dc2626;
+  background: #fef2f2;
+  padding: 8px 14px;
+  border-top: 1.5px solid #fecaca;
+  border-bottom: 1.5px solid #fecaca;
+}
+.up-list { background: #fff; }
+.up-row {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-}
-.fp-icon { font-size: 30px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
-.fp-body { flex: 1; min-width: 0; }
-.fp-mood { font-size: 13px; font-weight: 900; line-height: 1.2; }
-.fp-advice {
-  font-size: 11px; color: #475569; margin-top: 3px;
-  line-height: 1.45; font-weight: 600;
-}
-.fp-pills { display: flex; gap: 5px; flex-shrink: 0; }
-.fp-pill {
-  display: flex; flex-direction: column; align-items: center;
-  padding: 5px 8px; border-radius: 10px; min-width: 38px;
-}
-.fp-pnum { font-size: 16px; font-weight: 900; line-height: 1; }
-.fp-plbl {
-  font-size: 9px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .04em; margin-top: 2px;
-}
-.fp-bar-track {
-  height: 5px; background: rgba(0,0,0,.1);
-  border-radius: 3px; margin-top: 12px; overflow: hidden;
-}
-.fp-bar-fill {
-  height: 100%; border-radius: 3px; transition: width .7s ease;
-}
-
-/* ══ TOP-3 URGENT PANEL ══════════════════════════════════ */
-.up-wrap { margin: 10px 12px 0; border-radius: 12px; overflow: hidden; }
-.up-header {
-  font-size: 11px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: .07em; color: #dc2626;
-  background: #fef2f2; padding: 8px 12px;
-  border: 1.5px solid #fecaca; border-bottom: none;
-  border-radius: 10px 10px 0 0;
-}
-.up-list { border: 1.5px solid #fecaca; border-radius: 0 0 10px 10px; overflow: hidden; }
-.up-row {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 10px 12px; background: #fff;
+  padding: 10px 14px;
   border-bottom: 1px solid #fef2f2;
 }
 .up-row:last-child { border-bottom: none; }
@@ -456,13 +467,7 @@ body{
   flex-wrap: wrap; margin-top: 4px;
 }
 .up-who  { font-size: 10px; font-weight: 600; color: #475569; }
-.up-dept {
-  font-size: 10px; font-weight: 600; color: #7c3aed;
-  background: #f5f3ff; padding: 1px 6px; border-radius: 5px;
-}
-.up-chip {
-  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;
-}
+.up-chip { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px; }
 .up-chip-over  { background: #fef2f2; color: #dc2626; }
 .up-chip-today { background: #fff7ed; color: #ea580c; }
 .up-chip-soon  { background: #f0fdf4; color: #059669; }
