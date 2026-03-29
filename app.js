@@ -181,14 +181,15 @@ function buildForecastBanner() {
   else if (score <= 7)   { icon="⛅";  mood="Moderate Pressure"; color="#d97706"; bg="#fffbeb"; }
   else if (score <= 12)  { icon="🌧️"; mood="Heavy Load";        color="#ea580c"; bg="#fff7ed"; }
   else                   { icon="⛈️"; mood="Storm — Critical";  color="#dc2626"; bg="#fef2f2"; }
-  const pill = (n, lbl, ac, ab) => `<div class="fc-pill" style="background:${n>0?ab:"#f1f5f9"};color:${n>0?ac:"#94a3b8"}">
+  const pill = (n, lbl, ac, ab, onclick) => `<div class="fc-pill${n>0?' fc-pill-click':''}" style="background:${n>0?ab:"#f1f5f9"};color:${n>0?ac:"#94a3b8"}"
+    ${n>0&&onclick?`onclick="${onclick}" title="Tap to view"`:''}${n>0?'style="cursor:pointer;background:'+ab+';color:'+ac+'"':''}>
     <span class="fc-pnum">${n}</span><span class="fc-plbl">${lbl}</span></div>`;
   return `<div class="fc-banner" style="background:${bg};border-bottom:2px solid ${color}30">
     <div class="fc-left"><span class="fc-icon">${icon}</span><div class="fc-mood" style="color:${color}">${mood}</div></div>
     <div class="fc-pills">
-      ${pill(overdue.length,"Overdue","#dc2626","#fef2f2")}
-      ${pill(today.length,  "Today",  "#ea580c","#fff7ed")}
-      ${pill(urgent.length, "Urgent", "#dc2626","#fef2f2")}
+      ${pill(overdue.length,"Overdue","#dc2626","#fef2f2","showOfficeUrgent('overdue')")}
+      ${pill(today.length,  "Today",  "#ea580c","#fff7ed","showOfficeUrgent('today')")}
+      ${pill(urgent.length, "Urgent", "#dc2626","#fef2f2","showOfficeUrgent('urgent')")}
     </div>
   </div>`;
 }
@@ -199,23 +200,38 @@ function buildTop3Urgent() {
     .sort((a, b) => safeDate(a.dueDate) - safeDate(b.dueDate))
     .slice(0, 3);
   if (!top3.length) return "";
-  const rows = top3.map((t, i) => {
+
+  const rows = top3.map(t => {
     const diff    = diffDays(t);
-    const daysLbl = diff < 0 ? `${Math.abs(diff)}d overdue` : diff === 0 ? "Due today" : `Due in ${diff}d`;
-    const chipCls = diff < 0 ? "up-chip-over" : diff === 0 ? "up-chip-today" : "up-chip-soon";
+    const emp     = t.assignedTo || "—";
+    const idx     = allStaff.indexOf(emp);
+    const color   = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
+    const initials= emp.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
+
+    // Right-side bubble: overdue days (red), due today (amber), upcoming (grey)
+    let bubble = "";
+    if (diff < 0) {
+      bubble = `<div class="up-bubble up-bubble-over">${Math.abs(diff)}d</div>`;
+    } else if (diff === 0) {
+      bubble = `<div class="up-bubble up-bubble-today">Today</div>`;
+    } else {
+      bubble = `<div class="up-bubble up-bubble-soon">${diff}d</div>`;
+    }
+
     return `<div class="up-row">
-      <div class="up-rank">${i+1}</div>
+      <div class="up-av" style="background:${color}">${initials}</div>
       <div class="up-content">
-        <div class="up-title">${t.title}</div>
-        <div class="up-meta">
-          <span class="up-who">👤 ${t.assignedTo||"—"}</span>
-          <span class="up-chip ${chipCls}">${daysLbl}</span>
-        </div>
-      </div></div>`;
+        <div class="up-name">${emp}</div>
+        <div class="up-task">${t.title}</div>
+      </div>
+      ${bubble}
+    </div>`;
   }).join("");
+
   return `<div class="up-wrap">
-    <div class="up-header">🔴 Top ${top3.length} Urgent</div>
-    <div class="up-list">${rows}</div></div>`;
+    <div class="up-header">🔴 Urgent — needs attention</div>
+    <div class="up-list">${rows}</div>
+  </div>`;
 }
 
 // ── Load tasks ─────────────────────────────────────
@@ -454,30 +470,27 @@ function renderStaffView() {
     return;
   }
 
-  // Identity header
-  const nameCard = document.createElement("div");
-  nameCard.className = "my-tasks-header";
-  nameCard.innerHTML = `
-    <div class="mth-avatar">${currentUser.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase()}</div>
-    <div class="mth-info">
-      <div class="mth-name">${currentUser}</div>
-      <div class="mth-sub">${pending.length} pending · ${done.length} completed</div>
-    </div>`;
-  dashboard.appendChild(nameCard);
+  // Stats shown in staffStrip above — no duplicate name card needed
 
+
+  const priChip = (t) => {
+    const labels = {p1:"🔴 Urgent", p2:"🟠 High", p3:"🔵 Normal", p4:"⚪ Low"};
+    const cls    = {p1:"mts-p1",    p2:"mts-p2",  p3:"mts-p3",   p4:"mts-p4"};
+    return `<span class="mts-pri-chip ${cls[t.priority||'p4']}">${labels[t.priority||'p4']}</span>`;
+  };
   const sections = [
     { key:"overdue",   icon:"⚠️",  label:"Overdue",          accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
       tasks: sortByPriority(pending.filter(t => diffDays(t) < 0)),
-      rowFn: t => `<div class="mts-row mts-row-over"><div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-over">${Math.abs(diffDays(t))}d overdue</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-over">${Math.abs(diffDays(t))}d overdue</div></div>` },
     { key:"today",     icon:"📋",  label:"Today's Tasks",    accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
       tasks: sortByPriority(pending.filter(t => diffDays(t) === 0)),
-      rowFn: t => `<div class="mts-row mts-row-today"><div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-today">Due today</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-today">Due today</div></div>` },
     { key:"tomorrow",  icon:"📅",  label:"Tomorrow's Tasks", accent:"#0ea5e9", bg:"#f0f9ff", border:"#bae6fd",
       tasks: sortByPriority(pending.filter(t => diffDays(t) === 1)),
-      rowFn: t => `<div class="mts-row mts-row-tmrw"><div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-tmrw">Tomorrow</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-tmrw">Tomorrow</div></div>` },
     { key:"upcoming",  icon:"🗓",  label:"Upcoming",         accent:"#059669", bg:"#f0fdf4", border:"#bbf7d0",
       tasks: sortByPriority(pending.filter(t => diffDays(t) > 1)),
-      rowFn: t => `<div class="mts-row mts-row-up"><div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-up">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div></div>` },
     { key:"completed", icon:"✅",  label:"Completed",        accent:"#94a3b8", bg:"#f8fafc", border:"#e2e8f0",
       tasks: done,
       rowFn: t => `<div class="mts-row mts-row-done"><div class="mts-title mts-done-title">${t.title}</div><div class="mts-badge mts-badge-done">✓ Done</div></div>` }
@@ -542,6 +555,83 @@ function getRepeatValue(selId, custId) {
   }
   return v;
 }
+
+
+// ── Show office-wide urgent/overdue tasks (staff view — read only) ──────────
+window.showOfficeUrgent = function(mode) {
+  const existing = document.getElementById("officeUrgentOverlay");
+  if (existing) existing.remove();
+
+  let tasks;
+  let title, sub;
+  if (mode === "overdue") {
+    tasks = allTasks.filter(t => t.status !== "completed" && diffDays(t) < 0);
+    title = "⚠ Overdue Tasks — All Staff";
+    sub   = "Tap to see · Help where you can";
+  } else if (mode === "today") {
+    tasks = allTasks.filter(t => t.status !== "completed" && diffDays(t) === 0);
+    title = "📋 Today's Tasks — All Staff";
+    sub   = "Everything due today across the office";
+  } else {
+    tasks = allTasks.filter(t => t.status !== "completed" && t.priority === "p1");
+    title = "🔴 Urgent Tasks — All Staff";
+    sub   = "All urgent tasks across the office";
+  }
+
+  const ov = document.createElement("div");
+  ov.id = "officeUrgentOverlay";
+  ov.style.cssText = "position:fixed;inset:0;background:#f1f5f9;z-index:300;overflow-y:auto;";
+
+  const priLabels = {p1:"🔴 Urgent", p2:"🟠 High", p3:"🔵 Normal", p4:"⚪ Low"};
+  const priCls    = {p1:"mts-p1", p2:"mts-p2", p3:"mts-p3", p4:"mts-p4"};
+
+  // Group by employee
+  const grouped = {};
+  tasks.forEach(t => {
+    if (!grouped[t.assignedTo]) grouped[t.assignedTo] = [];
+    grouped[t.assignedTo].push(t);
+  });
+
+  const rows = Object.entries(grouped).sort((a,b) => b[1].length - a[1].length).map(([emp, empTasks]) => {
+    const idx   = allStaff.indexOf(emp);
+    const color = avatarColors[idx % avatarColors.length];
+    const init  = emp.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
+    const taskRows = empTasks.sort((a,b) => {
+      const po = {p1:1,p2:2,p3:3,p4:4};
+      return po[a.priority]-po[b.priority];
+    }).map(t => {
+      const d = diffDays(t);
+      const dueStr = d < 0 ? `${Math.abs(d)}d overdue` : d === 0 ? "Due today" : `Due in ${d}d`;
+      const dueCls = d < 0 ? "mts-badge-over" : d === 0 ? "mts-badge-today" : "mts-badge-tmrw";
+      return `<div class="mts-row" style="padding:10px 16px">
+        <span class="mts-pri-chip ${priCls[t.priority||'p4']}">${priLabels[t.priority||'p4']}</span>
+        <div class="mts-title">${t.title}</div>
+        <div class="mts-badge ${dueCls}">${dueStr}</div>
+      </div>`;
+    }).join("");
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:#fff;border-bottom:1px solid #e2e8f0">
+        <div style="width:28px;height:28px;border-radius:50%;background:${color};color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${init}</div>
+        <div style="font-size:13px;font-weight:800;color:#0f172a;flex:1">${emp}</div>
+        <div style="font-size:11px;font-weight:700;color:#475569">${empTasks.length} task${empTasks.length!==1?"s":""}</div>
+      </div>
+      <div style="background:#fff;border-bottom:2px solid #e2e8f0">${taskRows}</div>
+    </div>`;
+  }).join("");
+
+  ov.innerHTML = `
+    <div style="background:linear-gradient(135deg,#991b1b,#dc2626);padding:14px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10">
+      <button onclick="document.getElementById('officeUrgentOverlay').remove()"
+        style="width:34px;height:34px;border:none;border-radius:9px;background:rgba(255,255,255,.2);color:#fff;font-size:18px;cursor:pointer;display:grid;place-items:center;flex-shrink:0">←</button>
+      <div>
+        <div style="color:#fff;font-size:15px;font-weight:800">${title}</div>
+        <div style="color:rgba(255,255,255,.75);font-size:11px;font-weight:600">${tasks.length} task${tasks.length!==1?"s":""} · ${sub}</div>
+      </div>
+    </div>
+    <div style="padding:12px 0">${rows || '<div style="padding:48px 16px;text-align:center;color:#94a3b8;font-size:14px;font-weight:600">All clear — nothing here!</div>'}</div>`;
+
+  document.body.appendChild(ov);
+};
 
 window.addTask = async function() {
   if(!isAdmin) return;
