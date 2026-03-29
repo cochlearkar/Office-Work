@@ -1,6 +1,7 @@
 import { db } from "./firebase.js";
 import {
-  collection, addDoc, getDocs, updateDoc, deleteDoc, doc
+  collection, addDoc, getDocs, updateDoc, deleteDoc, doc,
+  onSnapshot, query, orderBy, getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ── Config ─────────────────────────────────────────
@@ -37,6 +38,8 @@ let editId       = null;
 let delId        = null;
 let currentDept  = "child";
 let urgentView   = false;
+let messageCounts = {};     // taskId -> count (for badges)
+let activeChatUnsub = null; // active onSnapshot unsubscriber
 
 // ── DOM ────────────────────────────────────────────
 const loginScreen  = document.getElementById("loginScreen");
@@ -244,6 +247,8 @@ async function loadTasks(keepView = false) {
     showToast("Cannot reach database","error");
     allTasks = [];
   }
+  // Load message counts for chat badges (non-blocking)
+  loadMessageCounts().catch(() => {});
 
   if(isAdmin) {
     if(!keepView) {
@@ -377,6 +382,9 @@ function buildAdminTaskRow(t) {
     <div class="task-text" title="${t.title}">${t.title}${repeat}</div>
     <div class="task-due-chip ${dueInfo.cls}">${dueInfo.txt}</div>
     <div class="task-acts">
+      <button class="tact-btn chat-btn" onclick="openChat('${t.id}','${t.title.replace(/'/g,\"\\'\")}','${t.assignedTo}')" title="Messages">
+        💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span>
+      </button>
       <button class="tact-btn"     onclick="openEditModal('${t.id}')"   title="Edit">✏️</button>
       <button class="tact-btn del" onclick="openDeleteModal('${t.id}')" title="Delete">🗑</button>
     </div>`;
@@ -480,16 +488,16 @@ function renderStaffView() {
   const sections = [
     { key:"overdue",   icon:"⚠️",  label:"Overdue",          accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
       tasks: sortByPriority(pending.filter(t => diffDays(t) < 0)),
-      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-overdue-bubble">${Math.abs(diffDays(t))}d</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-overdue-bubble">${Math.abs(diffDays(t))}d</div><button class="mts-chat-btn" onclick="openChat('${t.id}','${t.title.replace(/'/g,"\\'")}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"today",     icon:"📋",  label:"Today's Tasks",    accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
       tasks: sortByPriority(pending.filter(t => diffDays(t) === 0)),
-      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}','${t.title.replace(/'/g,"\\'")}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"tomorrow",  icon:"📅",  label:"Tomorrow's Tasks", accent:"#0ea5e9", bg:"#f0f9ff", border:"#bae6fd",
       tasks: sortByPriority(pending.filter(t => diffDays(t) === 1)),
-      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}','${t.title.replace(/'/g,"\\'")}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"upcoming",  icon:"🗓",  label:"Upcoming",         accent:"#059669", bg:"#f0fdf4", border:"#bbf7d0",
       tasks: sortByPriority(pending.filter(t => diffDays(t) > 1)),
-      rowFn: t => `<div class="mts-row mts-row-up">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-up">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div><button class="mts-chat-btn" onclick="openChat('${t.id}','${t.title.replace(/'/g,"\\'")}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"completed", icon:"✅",  label:"Completed",        accent:"#94a3b8", bg:"#f8fafc", border:"#e2e8f0",
       tasks: done,
       rowFn: t => `<div class="mts-row mts-row-done"><div class="mts-title mts-done-title">${t.title}</div><div class="mts-badge mts-badge-done">✓ Done</div></div>` }
@@ -922,3 +930,167 @@ window.submitFabTask = async function() {
   } catch(e) { showToast("Error saving", "error"); }
   btn.textContent = "Add Task"; btn.disabled = false;
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TASK CHAT SYSTEM
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Load message counts for all tasks (for badge display) ─────────────────
+async function loadMessageCounts() {
+  try {
+    const taskIds = allTasks.map(t => t.id);
+    const counts = {};
+    await Promise.all(taskIds.map(async id => {
+      try {
+        const snap = await getCountFromServer(collection(db, "tasks", id, "messages"));
+        counts[id] = snap.data().count;
+      } catch(e) { counts[id] = 0; }
+    }));
+    messageCounts = counts;
+    updateAllChatBadges();
+  } catch(e) { console.warn("Message counts:", e.message); }
+}
+
+function updateAllChatBadges() {
+  Object.entries(messageCounts).forEach(([id, count]) => {
+    const badge = document.getElementById("cb-" + id);
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count > 9 ? "9+" : count;
+      badge.style.display = "flex";
+    } else {
+      badge.style.display = "none";
+    }
+  });
+}
+
+// ── Open chat overlay for a task ──────────────────────────────────────────
+window.openChat = function(taskId, taskTitle, assignedTo) {
+  // Clean up any previous listener
+  if (activeChatUnsub) { activeChatUnsub(); activeChatUnsub = null; }
+
+  const overlay = document.getElementById("chatOverlay");
+  document.getElementById("chatTaskTitle").textContent = taskTitle;
+  document.getElementById("chatAssignedTo").textContent = assignedTo ? "Assigned to: " + assignedTo : "";
+  document.getElementById("chatMessages").innerHTML = `<div class="chat-loading">Loading…</div>`;
+  document.getElementById("chatInput").value = "";
+  document.getElementById("chatSendBtn").dataset.taskId = taskId;
+  overlay.style.display = "flex";
+  overlay.dataset.taskId = taskId;
+
+  // Real-time listener
+  const msgsRef = query(
+    collection(db, "tasks", taskId, "messages"),
+    orderBy("createdAt", "asc")
+  );
+
+  activeChatUnsub = onSnapshot(msgsRef, snap => {
+    const msgs = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    renderChatMessages(msgs);
+    // update badge count
+    messageCounts[taskId] = msgs.length;
+    const badge = document.getElementById("cb-" + taskId);
+    if (badge) {
+      badge.textContent = msgs.length > 9 ? "9+" : msgs.length;
+      badge.style.display = msgs.length > 0 ? "flex" : "none";
+    }
+  }, err => {
+    console.error("Chat listener:", err);
+  });
+
+  setTimeout(() => document.getElementById("chatInput").focus(), 200);
+};
+
+function renderChatMessages(msgs) {
+  const container = document.getElementById("chatMessages");
+  if (!msgs.length) {
+    container.innerHTML = `<div class="chat-empty">
+      <div class="chat-empty-icon">💬</div>
+      <div class="chat-empty-text">No messages yet.<br>Start the conversation!</div>
+    </div>`;
+    return;
+  }
+
+  let lastDate = "";
+  container.innerHTML = msgs.map(m => {
+    const isMine = m.sender === currentUser;
+    const ts     = m.createdAt?.toDate ? m.createdAt.toDate() : new Date();
+    const dateStr = ts.toLocaleDateString("en-IN", {day:"numeric", month:"short"});
+    const timeStr = ts.toLocaleTimeString("en-IN", {hour:"2-digit", minute:"2-digit", hour12:true});
+    const isAdmin = m.sender === ADMIN;
+
+    let dateDivider = "";
+    if (dateStr !== lastDate) {
+      lastDate = dateStr;
+      dateDivider = `<div class="chat-date-divider"><span>${dateStr}</span></div>`;
+    }
+
+    const initials = m.sender.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
+    const idx      = allStaff.indexOf(m.sender);
+    const color    = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
+
+    return `${dateDivider}
+    <div class="chat-msg ${isMine ? "chat-mine" : "chat-theirs"}">
+      ${!isMine ? `<div class="chat-av" style="background:${color}">${initials}</div>` : ""}
+      <div class="chat-bubble-wrap">
+        ${!isMine ? `<div class="chat-sender${isAdmin ? " chat-sender-admin" : ""}">${m.sender}${isAdmin ? " 👑" : ""}</div>` : ""}
+        <div class="chat-bubble ${isMine ? "chat-bubble-mine" : "chat-bubble-theirs"}">
+          ${escHtml(m.text)}
+        </div>
+        <div class="chat-time ${isMine ? "chat-time-mine" : ""}">${timeStr}</div>
+      </div>
+    </div>`;
+  }).join("");
+
+  // Scroll to bottom
+  container.scrollTop = container.scrollHeight;
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");
+}
+
+window.closeChat = function() {
+  if (activeChatUnsub) { activeChatUnsub(); activeChatUnsub = null; }
+  document.getElementById("chatOverlay").style.display = "none";
+};
+
+window.closeChatIfOutside = function(e) {
+  if (e.target === document.getElementById("chatOverlay")) closeChat();
+};
+
+window.sendChatMessage = async function() {
+  const input  = document.getElementById("chatInput");
+  const text   = input.value.trim();
+  const taskId = document.getElementById("chatSendBtn").dataset.taskId;
+  if (!text || !taskId) return;
+
+  const btn = document.getElementById("chatSendBtn");
+  btn.disabled = true;
+  input.value = "";
+
+  try {
+    await addDoc(collection(db, "tasks", taskId, "messages"), {
+      text,
+      sender:    currentUser,
+      createdAt: new Date()
+    });
+    // listener will auto-update UI
+  } catch(e) {
+    showToast("Could not send message", "error");
+    input.value = text; // restore on failure
+  }
+  btn.disabled = false;
+  input.focus();
+};
+
+// Send on Enter (Shift+Enter = newline)
+window.chatKeydown = function(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendChatMessage();
+  }
+};
+
+// Load counts after tasks load — patch into loadTasks
+const _origLoadTasks = loadTasks;
