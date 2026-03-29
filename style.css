@@ -483,11 +483,11 @@ body{
 .mth-avatar { width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,.25); color:#fff; font-size:14px; font-weight:900; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .mth-name   { font-size:15px; font-weight:900; color:#fff; }
 .mth-sub    { font-size:11px; color:rgba(255,255,255,.75); margin-top:2px; font-weight:600; }
-.mts-sec-header { display:flex; align-items:center; gap:8px; padding:9px 14px; margin-top:8px; }
+.mts-sec-header { display:flex; align-items:center; gap:8px; padding:9px 14px; margin-top:8px; margin-bottom:0; }
 .mts-sec-icon   { font-size:15px; flex-shrink:0; }
 .mts-sec-label  { font-size:12px; font-weight:800; flex:1; }
 .mts-sec-count  { font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px; }
-.mts-block      { background:#fff; border-left:3px solid #e2e8f0; border-bottom:1.5px solid #e2e8f0; margin-bottom:2px; }
+.mts-block      { background:#fff; border-left:3px solid #e2e8f0; border-bottom:1.5px solid #e2e8f0; margin-bottom:2px; margin-top:0; }
 .mts-row        { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 14px; border-bottom:1px solid #f1f5f9; }
 .mts-row:last-child { border-bottom:none; }
 .mts-title      { font-size:13px; font-weight:700; color:#0f172a; flex:1; min-width:0; line-height:1.35; }
@@ -517,6 +517,23 @@ body{
 .mts-p2 { background: var(--bg-h); color: var(--c-h); }
 .mts-p3 { background: var(--bg-n); color: var(--c-n); }
 .mts-p4 { background: var(--bg-l); color: var(--c-l); }
+.mts-pri-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.mts-overdue-bubble {
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  background: #dc2626;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 
 /* ══ SECTION BLOCKS — card-like with solid header ═══════════════════ */
 .mts-sec-header {
@@ -526,6 +543,7 @@ body{
   padding: 10px 14px;
   margin-top: 12px;
   border-radius: 10px 10px 0 0;
+  margin-bottom: 0;
 }
 .mts-block {
   background: #fff;

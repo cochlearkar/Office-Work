@@ -474,20 +474,19 @@ function renderStaffView() {
 
 
   const priChip = (t) => {
-    const labels = {p1:"🔴 Urgent", p2:"🟠 High", p3:"🔵 Normal", p4:"⚪ Low"};
-    const cls    = {p1:"mts-p1",    p2:"mts-p2",  p3:"mts-p3",   p4:"mts-p4"};
-    return `<span class="mts-pri-chip ${cls[t.priority||'p4']}">${labels[t.priority||'p4']}</span>`;
+    const colors = {p1:"var(--c-u)", p2:"var(--c-h)", p3:"var(--c-n)", p4:"var(--c-l)"};
+    return `<span class="mts-pri-dot" style="background:${colors[t.priority||'p4']}"></span>`;
   };
   const sections = [
     { key:"overdue",   icon:"⚠️",  label:"Overdue",          accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
       tasks: sortByPriority(pending.filter(t => diffDays(t) < 0)),
-      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-over">${Math.abs(diffDays(t))}d overdue</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-overdue-bubble">${Math.abs(diffDays(t))}d</div></div>` },
     { key:"today",     icon:"📋",  label:"Today's Tasks",    accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
       tasks: sortByPriority(pending.filter(t => diffDays(t) === 0)),
-      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-today">Due today</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}</div></div>` },
     { key:"tomorrow",  icon:"📅",  label:"Tomorrow's Tasks", accent:"#0ea5e9", bg:"#f0f9ff", border:"#bae6fd",
       tasks: sortByPriority(pending.filter(t => diffDays(t) === 1)),
-      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-tmrw">Tomorrow</div></div>` },
+      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div></div>` },
     { key:"upcoming",  icon:"🗓",  label:"Upcoming",         accent:"#059669", bg:"#f0fdf4", border:"#bbf7d0",
       tasks: sortByPriority(pending.filter(t => diffDays(t) > 1)),
       rowFn: t => `<div class="mts-row mts-row-up">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div></div>` },
