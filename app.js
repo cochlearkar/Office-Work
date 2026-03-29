@@ -382,7 +382,7 @@ function buildAdminTaskRow(t) {
     <div class="task-text" title="${t.title}">${t.title}${repeat}</div>
     <div class="task-due-chip ${dueInfo.cls}">${dueInfo.txt}</div>
     <div class="task-acts">
-      <button class="tact-btn chat-btn" onclick="openChat('${t.id}','${t.title.replace(/'/g,\"\\'\")}','${t.assignedTo}')" title="Messages">
+      <button class="tact-btn chat-btn" onclick="openChat('${t.id}')" title="Messages">
         💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span>
       </button>
       <button class="tact-btn"     onclick="openEditModal('${t.id}')"   title="Edit">✏️</button>
@@ -488,16 +488,16 @@ function renderStaffView() {
   const sections = [
     { key:"overdue",   icon:"⚠️",  label:"Overdue",          accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
       tasks: sortByPriority(pending.filter(t => diffDays(t) < 0)),
-      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-overdue-bubble">${Math.abs(diffDays(t))}d</div><button class="mts-chat-btn" onclick="openChat('${t.id}','${t.title.replace(/'/g,"\\'")}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-overdue-bubble">${Math.abs(diffDays(t))}d</div><button class="mts-chat-btn" onclick="openChat('${t.id}')}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"today",     icon:"📋",  label:"Today's Tasks",    accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
       tasks: sortByPriority(pending.filter(t => diffDays(t) === 0)),
-      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}','${t.title.replace(/'/g,"\\'")}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"tomorrow",  icon:"📅",  label:"Tomorrow's Tasks", accent:"#0ea5e9", bg:"#f0f9ff", border:"#bae6fd",
       tasks: sortByPriority(pending.filter(t => diffDays(t) === 1)),
-      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}','${t.title.replace(/'/g,"\\'")}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"upcoming",  icon:"🗓",  label:"Upcoming",         accent:"#059669", bg:"#f0fdf4", border:"#bbf7d0",
       tasks: sortByPriority(pending.filter(t => diffDays(t) > 1)),
-      rowFn: t => `<div class="mts-row mts-row-up">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div><button class="mts-chat-btn" onclick="openChat('${t.id}','${t.title.replace(/'/g,"\\'")}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => `<div class="mts-row mts-row-up">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"completed", icon:"✅",  label:"Completed",        accent:"#94a3b8", bg:"#f8fafc", border:"#e2e8f0",
       tasks: done,
       rowFn: t => `<div class="mts-row mts-row-done"><div class="mts-title mts-done-title">${t.title}</div><div class="mts-badge mts-badge-done">✓ Done</div></div>` }
@@ -965,7 +965,12 @@ function updateAllChatBadges() {
 }
 
 // ── Open chat overlay for a task ──────────────────────────────────────────
-window.openChat = function(taskId, taskTitle, assignedTo) {
+window.openChat = function(taskId) {
+  // Look up task details from allTasks
+  const task = allTasks.find(t => t.id === taskId) || {};
+  const taskTitle  = task.title    || "Task";
+  const assignedTo = task.assignedTo || "";
+
   // Clean up any previous listener
   if (activeChatUnsub) { activeChatUnsub(); activeChatUnsub = null; }
 
@@ -1092,5 +1097,3 @@ window.chatKeydown = function(e) {
   }
 };
 
-// Load counts after tasks load — patch into loadTasks
-const _origLoadTasks = loadTasks;
