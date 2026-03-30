@@ -40,7 +40,7 @@ let currentDept  = "child";
 let urgentView   = false;
 let messageCounts = {};     // taskId -> count (for badges)
 let activeChatUnsub = null; // active onSnapshot unsubscriber
-let messageCountUnsubs = [];  // live listeners for message count badges
+let messageCountUnsubs = [];  // live listeners for message badges
 
 // ── DOM ────────────────────────────────────────────
 const loginScreen  = document.getElementById("loginScreen");
@@ -940,22 +940,19 @@ window.submitFabTask = async function() {
 // TASK CHAT SYSTEM
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── Live message-count listeners for all tasks (real-time badge updates) ──
+// ── Live message-count listeners — badges update in real time ──────────────
 function loadMessageCounts() {
-  // Cancel any previous listeners
   messageCountUnsubs.forEach(fn => fn());
   messageCountUnsubs = [];
-
   allTasks.forEach(task => {
     const unsub = onSnapshot(
       collection(db, "tasks", task.id, "messages"),
       snap => {
-        // Count only messages from others (not sent by current user)
         const unread = snap.docs.filter(d => d.data().sender !== currentUser).length;
         messageCounts[task.id] = unread;
         updateBadge(task.id, unread);
       },
-      () => {}  // silently ignore permission errors
+      () => {}
     );
     messageCountUnsubs.push(unsub);
   });
@@ -966,7 +963,6 @@ function updateAllChatBadges() {
 }
 
 function updateBadge(taskId, count) {
-  // Use querySelectorAll — badge element may appear in multiple re-renders
   document.querySelectorAll("[id='cb-" + taskId + "']").forEach(badge => {
     if (count > 0) {
       badge.textContent = count > 9 ? "9+" : count;
