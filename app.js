@@ -217,35 +217,33 @@ function buildTop3Urgent() {
   if (!top3.length) return "";
 
   const rows = top3.map(t => {
-    const diff    = diffDays(t);
-    const emp     = t.assignedTo || "—";
-    const idx     = allStaff.indexOf(emp);
-    const color   = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
-    const initials= emp.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
+    const diff = diffDays(t);
+    const emp  = t.assignedTo || "—";
 
-    // Right-side bubble: overdue days (red), due today (amber), upcoming (grey)
-    let bubble = "";
+    let dueBubble = "";
     if (diff < 0) {
-      bubble = `<div class="up-bubble up-bubble-over">${Math.abs(diff)}d</div>`;
+      dueBubble = `<div class="mts-overdue-bubble">${Math.abs(diff)}d</div>`;
     } else if (diff === 0) {
-      bubble = `<div class="up-bubble up-bubble-today">Today</div>`;
+      dueBubble = `<div class="mts-badge mts-badge-today">Today</div>`;
     } else {
-      bubble = `<div class="up-bubble up-bubble-soon">${diff}d</div>`;
+      dueBubble = `<div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div>`;
     }
 
-    return `<div class="up-row">
-      <div class="up-av" style="background:${color}">${initials}</div>
-      <div class="up-content">
-        <div class="up-name">${emp}</div>
-        <div class="up-task">${t.title}</div>
-      </div>
-      ${bubble}
+    return `<div class="mts-row">
+      <span class="mts-pri-dot" style="background:var(--c-u)"></span>
+      <div class="mts-title">${t.title}</div>
+      <div class="up-assignee">${emp}</div>
+      ${dueBubble}
     </div>`;
   }).join("");
 
-  return `<div class="up-wrap">
-    <div class="up-header">🔴 Urgent — needs attention</div>
-    <div class="up-list">${rows}</div>
+  return `<div class="mts-card mts-card-overdue" style="margin-bottom:0">
+    <div class="mts-sec-header" style="background:#fef2f2;border-left:4px solid #dc2626">
+      <span class="mts-sec-icon">🔴</span>
+      <span class="mts-sec-label" style="color:#dc2626">Urgent — needs attention</span>
+      <span class="mts-sec-count" style="background:#dc262620;color:#dc2626">${top3.length}</span>
+    </div>
+    <div class="mts-block">${rows}</div>
   </div>`;
 }
 
