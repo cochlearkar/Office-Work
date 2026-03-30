@@ -39,36 +39,29 @@ let delId        = null;
 let currentDept  = "child";
 let urgentView   = false;
 let messageCounts = {};     // taskId -> count (for badges)
-let activeChatUnsub = null; // active onSnapshot unsubscriber
-let messageCountUnsubs = [];  // live listeners for message badges
+let activeChatUnsub = null;
+let messageCountUnsubs = [];
 
 // ── DOM ────────────────────────────────────────────
-let loginScreen, appScreen, dashboard, toastEl, loginNames;
+const loginScreen  = document.getElementById("loginScreen");
+const appScreen    = document.getElementById("appScreen");
+const dashboard    = document.getElementById("dashboard");
+const toastEl      = document.getElementById("toast");
+const loginNames   = document.getElementById("loginNames");
 
-// ── Boot ────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", () => {
-  loginScreen = document.getElementById("loginScreen");
-  appScreen   = document.getElementById("appScreen");
-  dashboard   = document.getElementById("dashboard");
-  toastEl     = document.getElementById("toast");
-  loginNames  = document.getElementById("loginNames");
-  buildLoginScreen();
-  loadTasksForLoginBadges();
-});
+// ── Boot: show login ────────────────────────────────
+buildLoginScreen();
+loadTasksForLoginBadges();  // fetch tasks so name buttons show workload counts
 
 async function loadTasksForLoginBadges() {
   try {
     const snap = await getDocs(collection(db,"tasks"));
     allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
-    buildLoginScreen();
-  } catch(e) {
-    // Firebase unavailable — names still show, just no workload badges
-    console.warn("Badge preload (non-fatal):", e.message);
-  }
+    buildLoginScreen();  // re-render with counts populated
+  } catch(e) { console.warn("Badge preload:", e.message); }
 }
 
 function buildLoginScreen() {
-  if (!loginNames) return;
   loginNames.innerHTML = "";
 
   // Admin button
@@ -217,62 +210,50 @@ function buildTop3Urgent() {
   if (!top3.length) return "";
 
   const rows = top3.map(t => {
-    const diff = diffDays(t);
-    const emp  = t.assignedTo || "—";
+    const diff    = diffDays(t);
+    const emp     = t.assignedTo || "—";
+    const idx     = allStaff.indexOf(emp);
+    const color   = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
+    const initials= emp.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
 
-    let dueBubble = "";
+    // Right-side bubble: overdue days (red), due today (amber), upcoming (grey)
+    let bubble = "";
     if (diff < 0) {
-      dueBubble = `<div class="mts-overdue-bubble">${Math.abs(diff)}d</div>`;
+      bubble = `<div class="up-bubble up-bubble-over">${Math.abs(diff)}d</div>`;
     } else if (diff === 0) {
-      dueBubble = `<div class="mts-badge mts-badge-today">Today</div>`;
+      bubble = `<div class="up-bubble up-bubble-today">Today</div>`;
     } else {
-      dueBubble = `<div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div>`;
+      bubble = `<div class="up-bubble up-bubble-soon">${diff}d</div>`;
     }
 
-    return `<div class="mts-row">
-      <span class="mts-pri-dot" style="background:var(--c-u)"></span>
-      <div class="mts-title">${t.title}</div>
-      <div class="up-assignee">${emp}</div>
-      ${dueBubble}
+    return `<div class="up-row">
+      <div class="up-av" style="background:${color}">${initials}</div>
+      <div class="up-content">
+        <div class="up-name">${emp}</div>
+        <div class="up-task">${t.title}</div>
+      </div>
+      ${bubble}
     </div>`;
   }).join("");
 
-  return `<div class="mts-card mts-card-overdue" style="margin-bottom:0">
-    <div class="mts-sec-header" style="background:#fef2f2;border-left:4px solid #dc2626">
-      <span class="mts-sec-icon">🔴</span>
-      <span class="mts-sec-label" style="color:#dc2626">Urgent — needs attention</span>
-      <span class="mts-sec-count" style="background:#dc262620;color:#dc2626">${top3.length}</span>
-    </div>
-    <div class="mts-block">${rows}</div>
+  return `<div class="up-wrap">
+    <div class="up-header">🔴 Urgent — needs attention</div>
+    <div class="up-list">${rows}</div>
   </div>`;
 }
 
 // ── Load tasks ─────────────────────────────────────
 async function loadTasks(keepView = false) {
-  if (dashboard) dashboard.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>';
   try {
-    const snap = await Promise.race([
-      getDocs(collection(db,"tasks")),
-      new Promise((_,rej) => setTimeout(() => rej(new Error("timeout")), 8000))
-    ]);
+    const snap = await getDocs(collection(db,"tasks"));
     allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
   } catch(e) {
-    console.error("loadTasks error:", e);
-    if (dashboard) dashboard.innerHTML = `
-      <div class="empty-state" style="padding:48px 24px">
-        <div class="empty-icon">⚠️</div>
-        <h3 style="margin-bottom:8px">Cannot load tasks</h3>
-        <p style="font-size:13px;color:#64748b;margin-bottom:16px">
-          Check your internet connection.<br>
-          If the problem persists, your Firebase security rules<br>
-          may need to allow reads. <a href="#" onclick="loadTasks();return false" style="color:#0d9488;font-weight:700">Try again</a>
-        </p>
-      </div>`;
+    console.error(e);
+    showToast("Cannot reach database","error");
     allTasks = [];
-    return;
   }
   // Load message counts for chat badges (non-blocking)
-  try { loadMessageCounts(); } catch(e) { console.warn("Message counts:", e); }
+  loadMessageCounts().catch(() => {});
 
   if(isAdmin) {
     if(!keepView) {
@@ -959,7 +940,7 @@ window.submitFabTask = async function() {
 // TASK CHAT SYSTEM
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── Live message-count listeners — badges update in real time ──────────────
+// ── Live message-count listeners ──────────────────────────────────────────
 function loadMessageCounts() {
   messageCountUnsubs.forEach(fn => fn());
   messageCountUnsubs = [];
@@ -975,21 +956,15 @@ function loadMessageCounts() {
     );
     messageCountUnsubs.push(unsub);
   });
-  return Promise.resolve();
 }
 
 function updateAllChatBadges() {
   Object.entries(messageCounts).forEach(([id, count]) => updateBadge(id, count));
 }
-
 function updateBadge(taskId, count) {
   document.querySelectorAll("[id='cb-" + taskId + "']").forEach(badge => {
-    if (count > 0) {
-      badge.textContent = count > 9 ? "9+" : count;
-      badge.style.display = "flex";
-    } else {
-      badge.style.display = "none";
-    }
+    if (count > 0) { badge.textContent = count > 9 ? "9+" : count; badge.style.display = "flex"; }
+    else { badge.style.display = "none"; }
   });
 }
 
@@ -1125,3 +1100,4 @@ window.chatKeydown = function(e) {
     sendChatMessage();
   }
 };
+
