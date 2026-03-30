@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Tasks — all reads/writes open (no auth in this app)
+    match /tasks/{taskId} {
+      allow read, write: if true;
+
+      // Messages sub-collection under each task
+      match /messages/{msgId} {
+        allow read, write: if true;
+      }
+    }
+
+  }
+}

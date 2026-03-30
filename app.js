@@ -43,25 +43,32 @@ let activeChatUnsub = null; // active onSnapshot unsubscriber
 let messageCountUnsubs = [];  // live listeners for message badges
 
 // ── DOM ────────────────────────────────────────────
-const loginScreen  = document.getElementById("loginScreen");
-const appScreen    = document.getElementById("appScreen");
-const dashboard    = document.getElementById("dashboard");
-const toastEl      = document.getElementById("toast");
-const loginNames   = document.getElementById("loginNames");
+let loginScreen, appScreen, dashboard, toastEl, loginNames;
 
-// ── Boot: show login ────────────────────────────────
-buildLoginScreen();
-loadTasksForLoginBadges();  // fetch tasks so name buttons show workload counts
+// ── Boot ────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  loginScreen = document.getElementById("loginScreen");
+  appScreen   = document.getElementById("appScreen");
+  dashboard   = document.getElementById("dashboard");
+  toastEl     = document.getElementById("toast");
+  loginNames  = document.getElementById("loginNames");
+  buildLoginScreen();
+  loadTasksForLoginBadges();
+});
 
 async function loadTasksForLoginBadges() {
   try {
     const snap = await getDocs(collection(db,"tasks"));
     allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
-    buildLoginScreen();  // re-render with counts populated
-  } catch(e) { console.warn("Badge preload:", e.message); }
+    buildLoginScreen();
+  } catch(e) {
+    // Firebase unavailable — names still show, just no workload badges
+    console.warn("Badge preload (non-fatal):", e.message);
+  }
 }
 
 function buildLoginScreen() {
+  if (!loginNames) return;
   loginNames.innerHTML = "";
 
   // Admin button
@@ -244,16 +251,30 @@ function buildTop3Urgent() {
 
 // ── Load tasks ─────────────────────────────────────
 async function loadTasks(keepView = false) {
+  if (dashboard) dashboard.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>';
   try {
-    const snap = await getDocs(collection(db,"tasks"));
+    const snap = await Promise.race([
+      getDocs(collection(db,"tasks")),
+      new Promise((_,rej) => setTimeout(() => rej(new Error("timeout")), 8000))
+    ]);
     allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
   } catch(e) {
-    console.error(e);
-    showToast("Cannot reach database","error");
+    console.error("loadTasks error:", e);
+    if (dashboard) dashboard.innerHTML = `
+      <div class="empty-state" style="padding:48px 24px">
+        <div class="empty-icon">⚠️</div>
+        <h3 style="margin-bottom:8px">Cannot load tasks</h3>
+        <p style="font-size:13px;color:#64748b;margin-bottom:16px">
+          Check your internet connection.<br>
+          If the problem persists, your Firebase security rules<br>
+          may need to allow reads. <a href="#" onclick="loadTasks();return false" style="color:#0d9488;font-weight:700">Try again</a>
+        </p>
+      </div>`;
     allTasks = [];
+    return;
   }
   // Load message counts for chat badges (non-blocking)
-  loadMessageCounts().catch(() => {});
+  try { loadMessageCounts(); } catch(e) { console.warn("Message counts:", e); }
 
   if(isAdmin) {
     if(!keepView) {
@@ -956,6 +977,7 @@ function loadMessageCounts() {
     );
     messageCountUnsubs.push(unsub);
   });
+  return Promise.resolve();
 }
 
 function updateAllChatBadges() {

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TaskFlow — Diagnostics</title>
+  <style>
+    body { font-family: sans-serif; background: #f1f5f9; padding: 24px; max-width: 500px; margin: 0 auto; }
+    h2  { color: #0f172a; margin-bottom: 4px; }
+    .sub { color: #64748b; font-size: 13px; margin-bottom: 24px; }
+    .card { background: #fff; border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; border: 1.5px solid #e2e8f0; }
+    .row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .row:last-child { margin-bottom: 0; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; background: #cbd5e1; }
+    .dot.ok   { background: #22c55e; }
+    .dot.fail { background: #ef4444; }
+    .dot.spin { background: #f59e0b; animation: pulse .8s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .label { font-size: 14px; font-weight: 700; color: #0f172a; }
+    .detail { font-size: 12px; color: #64748b; margin-left: 24px; margin-top: -6px; margin-bottom: 6px; word-break: break-all; }
+    .btn { margin-top: 16px; width: 100%; padding: 12px; background: #0d9488; color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .btn:hover { background: #0f766e; }
+    h3 { font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+    .fix-box { background: #fefce8; border: 1.5px solid #fde68a; border-radius: 10px; padding: 14px 16px; font-size: 13px; color: #92400e; line-height: 1.6; margin-top: 12px; display: none; }
+    .fix-box code { background: #fef08a; padding: 2px 6px; border-radius: 4px; font-size: 12px; display: block; margin: 8px 0; white-space: pre; }
+    .success-box { background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 10px; padding: 14px 16px; font-size: 13px; color: #166534; display: none; margin-top: 12px; }
+  </style>
+</head>
+<body>
+<h2>⚕ TaskFlow Diagnostics</h2>
+<p class="sub">Opens automatically — checks what's preventing the app from working.</p>
+
+<div class="card" id="card-js">
+  <h3>Step 1 — JavaScript</h3>
+  <div class="row"><div class="dot spin" id="d-js"></div><div class="label" id="l-js">Checking…</div></div>
+</div>
+
+<div class="card" id="card-firebase">
+  <h3>Step 2 — Firebase SDK</h3>
+  <div class="row"><div class="dot spin" id="d-fb"></div><div class="label" id="l-fb">Checking…</div></div>
+</div>
+
+<div class="card" id="card-rules">
+  <h3>Step 3 — Firestore Rules (read tasks)</h3>
+  <div class="row"><div class="dot spin" id="d-rules"></div><div class="label" id="l-rules">Checking…</div></div>
+  <div class="detail" id="detail-rules"></div>
+  <div class="fix-box" id="fix-rules">
+    <strong>🔧 How to fix:</strong><br>
+    1. Go to <a href="https://console.firebase.google.com/project/task-manager-app-86f59/firestore/rules" target="_blank" style="color:#b45309">Firebase Console → Firestore → Rules</a><br>
+    2. Replace all the rules with this:
+    <code>rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /tasks/{taskId} {
+      allow read, write: if true;
+      match /messages/{msgId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}</code>
+    3. Click <strong>Publish</strong><br>
+    4. Wait 30 seconds, then <a href="diagnose.html" style="color:#b45309">run diagnostics again</a>
+  </div>
+</div>
+
+<div class="card" id="card-write">
+  <h3>Step 4 — Firestore Rules (write tasks)</h3>
+  <div class="row"><div class="dot spin" id="d-write"></div><div class="label" id="l-write">Checking…</div></div>
+  <div class="detail" id="detail-write"></div>
+</div>
+
+<div class="card" id="card-msgs">
+  <h3>Step 5 — Firestore Rules (messages sub-collection)</h3>
+  <div class="row"><div class="dot spin" id="d-msgs"></div><div class="label" id="l-msgs">Checking…</div></div>
+  <div class="detail" id="detail-msgs"></div>
+</div>
+
+<div class="success-box" id="all-ok">
+  ✅ <strong>All checks passed!</strong> Your app should work correctly.<br>
+  <a href="index.html" style="color:#166534;font-weight:700">→ Open TaskFlow</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc }
+  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const set = (id, ok, label, detail) => {
+  document.getElementById("d-"+id).className = "dot " + (ok ? "ok" : "fail");
+  document.getElementById("l-"+id).textContent = label;
+  if (detail) document.getElementById("detail-"+id) && (document.getElementById("detail-"+id).textContent = detail);
+};
+
+const show = id => { const el = document.getElementById(id); if(el) el.style.display = "block"; };
+
+async function run() {
+  // Step 1 — JS running
+  set("js", true, "JavaScript is working ✓");
+
+  // Step 2 — Firebase SDK
+  let db;
+  try {
+    const app = initializeApp({
+      apiKey: "AIzaSyAlfhXKGJyVJ5NiolhEJQ8aIfp27xScewM",
+      authDomain: "task-manager-app-86f59.firebaseapp.com",
+      projectId: "task-manager-app-86f59",
+    });
+    db = getFirestore(app);
+    set("fb", true, "Firebase SDK loaded ✓");
+  } catch(e) {
+    set("fb", false, "Firebase SDK failed ✗", e.message);
+    set("rules", false, "Skipped");
+    set("write", false, "Skipped");
+    set("msgs",  false, "Skipped");
+    return;
+  }
+
+  // Step 3 — Read tasks
+  let taskId = null;
+  try {
+    const snap = await Promise.race([
+      getDocs(collection(db, "tasks")),
+      new Promise((_,r) => setTimeout(() => r(new Error("Timed out after 8s — rules likely blocking reads")), 8000))
+    ]);
+    const count = snap.docs?.length ?? 0;
+    taskId = snap.docs?.[0]?.id ?? null;
+    set("rules", true, `Firestore read OK — ${count} task(s) found ✓`);
+  } catch(e) {
+    set("rules", false, "Firestore READ blocked ✗", "Error: " + e.message);
+    show("fix-rules");
+    set("write", false, "Skipped (fix read first)");
+    set("msgs",  false, "Skipped (fix read first)");
+    return;
+  }
+
+  // Step 4 — Write test
+  let testDocId = null;
+  try {
+    const ref = await Promise.race([
+      addDoc(collection(db, "tasks"), { _diag: true, title: "_test", createdAt: new Date() }),
+      new Promise((_,r) => setTimeout(() => r(new Error("Timed out")), 8000))
+    ]);
+    testDocId = ref.id;
+    // Clean up immediately
+    await deleteDoc(doc(db, "tasks", testDocId));
+    set("write", true, "Firestore write OK ✓");
+  } catch(e) {
+    set("write", false, "Firestore WRITE blocked ✗", "Error: " + e.message);
+  }
+
+  // Step 5 — Messages sub-collection
+  if (taskId) {
+    try {
+      const snap = await Promise.race([
+        getDocs(collection(db, "tasks", taskId, "messages")),
+        new Promise((_,r) => setTimeout(() => r(new Error("Timed out")), 8000))
+      ]);
+      set("msgs", true, `Messages sub-collection readable ✓ (${snap.docs.length} msg(s))`);
+    } catch(e) {
+      set("msgs", false, "Messages sub-collection BLOCKED ✗", "Error: " + e.message);
+      show("fix-rules");
+    }
+  } else {
+    set("msgs", true, "No tasks yet to test messages — add a task first");
+  }
+
+  // All passed?
+  const allPassed = ["js","fb","rules","write"].every(id => 
+    document.getElementById("d-"+id).classList.contains("ok")
+  );
+  if (allPassed) show("all-ok");
+}
+
+run().catch(e => console.error("Diagnostic error:", e));
+</script>
+</body>
+</html>
