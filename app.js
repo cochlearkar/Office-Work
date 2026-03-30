@@ -166,12 +166,11 @@ function loginAs(name) {
 }
 
 window.logout = function() {
-  // Clean up all live listeners
   messageCountUnsubs.forEach(fn => fn());
   messageCountUnsubs = [];
   if (activeChatUnsub) { activeChatUnsub(); activeChatUnsub = null; }
-  currentUser = null; isAdmin = false;
   messageCounts = {};
+  currentUser = null; isAdmin = false;
   appScreen.style.display   = "none";
   loginScreen.style.display = "flex";
 };
@@ -494,16 +493,16 @@ function renderStaffView() {
   const sections = [
     { key:"overdue",   icon:"⚠️",  label:"Overdue",          accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
       tasks: sortByPriority(pending.filter(t => diffDays(t) < 0)),
-      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-overdue-bubble">${Math.abs(diffDays(t))}d</div><button class="mts-chat-btn" onclick="openChat('${t.id}')}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-overdue-bubble">${Math.abs(diffDays(t))}d</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"today",     icon:"📋",  label:"Today's Tasks",    accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
       tasks: sortByPriority(pending.filter(t => diffDays(t) === 0)),
-      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"tomorrow",  icon:"📅",  label:"Tomorrow's Tasks", accent:"#0ea5e9", bg:"#f0f9ff", border:"#bae6fd",
       tasks: sortByPriority(pending.filter(t => diffDays(t) === 1)),
-      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"upcoming",  icon:"🗓",  label:"Upcoming",         accent:"#059669", bg:"#f0fdf4", border:"#bbf7d0",
       tasks: sortByPriority(pending.filter(t => diffDays(t) > 1)),
-      rowFn: t => `<div class="mts-row mts-row-up">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => `<div class="mts-row mts-row-up">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"completed", icon:"✅",  label:"Completed",        accent:"#94a3b8", bg:"#f8fafc", border:"#e2e8f0",
       tasks: done,
       rowFn: t => `<div class="mts-row mts-row-done"><div class="mts-title mts-done-title">${t.title}</div><div class="mts-badge mts-badge-done">✓ Done</div></div>` }
@@ -942,37 +941,33 @@ window.submitFabTask = async function() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Live message-count listeners for all tasks (real-time badge updates) ──
-let messageCountUnsubs = [];   // keep unsub fns so we can clean up on reload
-
 function loadMessageCounts() {
-  // Cancel any previous listeners first
+  // Cancel any previous listeners
   messageCountUnsubs.forEach(fn => fn());
   messageCountUnsubs = [];
 
   allTasks.forEach(task => {
-    const msgsCol = collection(db, "tasks", task.id, "messages");
-    const unsub = onSnapshot(msgsCol, snap => {
-      // Count only messages NOT sent by the current user (unread from others)
-      const unread = snap.docs.filter(d => d.data().sender !== currentUser).length;
-      messageCounts[task.id] = unread;
-      updateBadge(task.id, unread);
-    }, err => {
-      // Silently ignore permission errors for tasks not belonging to this user
-    });
+    const unsub = onSnapshot(
+      collection(db, "tasks", task.id, "messages"),
+      snap => {
+        // Count only messages from others (not sent by current user)
+        const unread = snap.docs.filter(d => d.data().sender !== currentUser).length;
+        messageCounts[task.id] = unread;
+        updateBadge(task.id, unread);
+      },
+      () => {}  // silently ignore permission errors
+    );
     messageCountUnsubs.push(unsub);
   });
 }
 
 function updateAllChatBadges() {
-  Object.entries(messageCounts).forEach(([id, count]) => {
-    updateBadge(id, count);
-  });
+  Object.entries(messageCounts).forEach(([id, count]) => updateBadge(id, count));
 }
 
-// Single badge update helper used by both live listeners and updateAllChatBadges
 function updateBadge(taskId, count) {
-  // There may be multiple badge elements with the same id across re-renders
-  document.querySelectorAll("#cb-" + taskId).forEach(badge => {
+  // Use querySelectorAll — badge element may appear in multiple re-renders
+  document.querySelectorAll("[id='cb-" + taskId + "']").forEach(badge => {
     if (count > 0) {
       badge.textContent = count > 9 ? "9+" : count;
       badge.style.display = "flex";
@@ -1114,4 +1109,3 @@ window.chatKeydown = function(e) {
     sendChatMessage();
   }
 };
-
