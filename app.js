@@ -31,8 +31,7 @@ let currentUser  = null;   // name string
 let isAdmin      = false;
 
 // ── App state ──────────────────────────────────────
-let allTasks       = [];
-let tasksPreloaded = false;   // true once loadTasksForLoginBadges has resolved
+let allTasks     = [];
 let selectedPri  = "p4";
 let editPri      = "p4";
 let editId       = null;
@@ -42,6 +41,7 @@ let urgentView   = false;
 let messageCounts = {};     // taskId -> count (for badges)
 let activeChatUnsub = null;
 let messageCountUnsubs = [];
+let taskListUnsub = null;   // onSnapshot listener for tasks
 
 // ── DOM ────────────────────────────────────────────
 const loginScreen  = document.getElementById("loginScreen");
@@ -55,15 +55,12 @@ buildLoginScreen();
 loadTasksForLoginBadges();  // fetch tasks so name buttons show workload counts
 
 async function loadTasksForLoginBadges() {
+  // Pre-fetch just to show workload badges on the login screen.
+  // This does NOT affect the post-login data flow.
   try {
     const snap = await getDocs(collection(db,"tasks"));
     allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
-    tasksPreloaded = true;
-    buildLoginScreen();           // refresh login badges
-    if (currentUser) {            // user already logged in while we were fetching
-      loadMessageCounts().catch(() => {});
-      renderCurrentView();        // render dashboard immediately with fresh data
-    }
+    buildLoginScreen();  // re-render name buttons with counts
   } catch(e) { console.warn("Badge preload:", e.message); }
 }
 
@@ -168,23 +165,34 @@ function loginAs(name) {
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
 
-  if (tasksPreloaded) {
-    // Data already available — render instantly, no spinner needed
-    loadMessageCounts().catch(() => {});
-    if (isAdmin) { populateAssignSelect(); }
-    renderCurrentView();
-  } else {
-    // Pre-fetch still in progress — show spinner; loadTasksForLoginBadges will
-    // call renderCurrentView() once it finishes (see above)
-    dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
-    if (isAdmin) { populateAssignSelect(); updateAdminStats(); }
-  }
+  // Show spinner immediately so user sees something while first data arrives
+  dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
+  if (isAdmin) { populateAssignSelect(); }
+
+  // Tear down any previous listener
+  if (taskListUnsub) { taskListUnsub(); taskListUnsub = null; }
+
+  // onSnapshot fires immediately with current data, then on every change.
+  // With Firestore's local cache this is instant on repeat visits.
+  taskListUnsub = onSnapshot(
+    collection(db, "tasks"),
+    snap => {
+      allTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      loadMessageCounts().catch(() => {});
+      renderCurrentView();
+    },
+    err => {
+      console.error("Task listener:", err.message);
+      showToast("Cannot reach database", "error");
+    }
+  );
 }
 
 window.logout = function() {
+  if (taskListUnsub)  { taskListUnsub();  taskListUnsub  = null; }
+  if (activeChatUnsub){ activeChatUnsub(); activeChatUnsub = null; }
   messageCountUnsubs.forEach(fn => fn());
   messageCountUnsubs = [];
-  if (activeChatUnsub) { activeChatUnsub(); activeChatUnsub = null; }
   messageCounts = {};
   currentUser = null; isAdmin = false;
   appScreen.style.display   = "none";
@@ -270,20 +278,26 @@ function renderCurrentView() {
   }
 }
 
-// ── Load tasks (used after mutations: add/edit/delete/toggle) ────────────────
+// ── loadTasks: called after mutations (add/edit/delete/toggle) ───────────────
+// onSnapshot handles re-rendering automatically when Firestore data changes,
+// so this is now a lightweight wrapper that just triggers a re-render
+// using the latest allTasks already populated by the live listener.
 async function loadTasks(keepView = false) {
-  try {
-    const snap = await getDocs(collection(db,"tasks"));
-    allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
-    tasksPreloaded = true;
-  } catch(e) {
-    console.error(e);
-    showToast("Cannot reach database","error");
-    allTasks = [];
+  // onSnapshot listener will fire and re-render automatically.
+  // If somehow the listener is not active (edge case), do a manual fetch.
+  if (!taskListUnsub) {
+    try {
+      const snap = await getDocs(collection(db,"tasks"));
+      allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
+    } catch(e) {
+      console.error(e);
+      showToast("Cannot reach database","error");
+    }
+    loadMessageCounts().catch(() => {});
+    renderCurrentView();
   }
-  // Load message counts for chat badges (non-blocking)
-  loadMessageCounts().catch(() => {});
-  renderCurrentView();
+  // If listener is active: it will fire on its own when Firestore updates.
+  // No manual re-render needed — avoids double-render flicker.
 }
 
 // ── ADMIN ──────────────────────────────────────────
