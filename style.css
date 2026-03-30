@@ -24,172 +24,169 @@ body{
 }
 
 /* ══ LOGIN ══════════════════════════════════════════ */
-/* ══ LOGIN SCREEN ══════════════════════════════════════════════════ */
+/* ══ LOGIN SCREEN ════════════════════════════════════════════════════════ */
 .login-screen {
   min-height: 100vh;
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding: 0;
-  background: #f2f2f7;
+  background: #f0f0f5;
   overflow-y: auto;
 }
-.login-card {
-  width: 100%;
-  max-width: 480px;
-  padding-bottom: 40px;
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-  text-align: center;
-}
-/* Hero section is the top of .login-card */
-.login-card {
-  /* Override: remove white card, make transparent so screen bg shows */
-  background: transparent;
-  box-shadow: none;
-  border-radius: 0;
-  padding: 0;
-  max-height: none;
-  overflow-y: visible;
-}
 
-/* Teal top hero — wraps logo + title + sub visually via padding on those elements */
-.login-logo {
-  width: 66px; height: 66px;
-  background: rgba(255,255,255,.2);
-  backdrop-filter: blur(8px);
-  border: 2px solid rgba(255,255,255,.3);
-  border-radius: 18px;
-  display: grid; place-items: center;
-  font-size: 30px;
-  margin: 0 auto 14px;
-  position: relative; z-index: 1;
-}
-.login-title {
-  font-size: 22px; font-weight: 900; color: #fff;
-  margin-bottom: 4px;
-  text-align: center;
-}
-.login-sub {
-  font-size: 12px; font-weight: 700;
-  color: rgba(255,255,255,.75);
-  margin-bottom: 0;
-  text-align: center;
-}
-
-/* Teal top band covers top of the page — logo/title float on it */
+/* Teal hero band — fixed behind the top content */
 .login-screen::before {
   content: '';
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: 220px;
-  background: linear-gradient(160deg, #0f766e 0%, #0d9488 60%, #14b8a6 100%);
-  border-radius: 0 0 36px 36px;
+  height: 210px;
+  background: linear-gradient(150deg, #0a5c52 0%, #0d9488 55%, #0f9f93 100%);
+  border-radius: 0 0 40px 40px;
   z-index: 0;
   pointer-events: none;
 }
-.login-screen > .login-card {
+
+.login-card {
   position: relative;
   z-index: 1;
-  padding-top: 44px;
+  width: 100%;
+  max-width: 420px;
+  padding: 48px 0 48px;
+  background: transparent;
+  text-align: center;
 }
 
-/* Cards list — single column */
+/* Logo */
+.login-logo {
+  width: 64px; height: 64px;
+  background: rgba(255,255,255,.18);
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255,255,255,.3);
+  border-radius: 18px;
+  display: grid; place-items: center;
+  font-size: 30px;
+  margin: 0 auto 12px;
+}
+
+.login-title {
+  font-size: 22px; font-weight: 900;
+  color: #fff;
+  margin-bottom: 3px;
+  letter-spacing: -.3px;
+}
+.login-sub {
+  font-size: 12px; font-weight: 700;
+  color: rgba(255,255,255,.7);
+  margin-bottom: 0;
+}
+
+/* White sheet slides up below the hero */
 .login-names {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 28px 16px 0;
-  background: #f2f2f7;
-  border-radius: 32px 32px 0 0;
-  margin-top: 24px;
+  gap: 9px;
+  background: #f0f0f5;
+  border-radius: 30px 30px 0 0;
+  margin-top: 28px;
+  padding: 24px 18px 8px;
   min-height: 60vh;
 }
 
-/* Dept section label */
+/* Section label */
 .login-dept-label {
   font-size: 10px; font-weight: 800;
-  letter-spacing: .1em; color: #8e8e93;
+  letter-spacing: .08em;
+  color: #8e8e93;
   text-transform: uppercase;
-  padding: 6px 4px 2px;
+  padding: 8px 6px 2px;
+  text-align: left;
 }
 
-/* Each person card — horizontal pill like the reference image */
+/* ── Person pill card ─────────────────────────────── */
 .login-name-btn {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 14px 18px;
+  gap: 14px;
+  padding: 12px 16px 12px 12px;
   border: none;
-  border-radius: 22px;
+  border-radius: 28px;                /* sleek rounded pill */
   background: #fff;
   font-family: 'Nunito', sans-serif;
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0,0,0,.07);
-  transition: transform .14s, box-shadow .14s;
   text-align: left;
+  /* very subtle shadow — sleek look */
+  box-shadow: 0 1px 6px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
+  transition: transform .13s ease, box-shadow .13s ease;
 }
 .login-name-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0,0,0,.12);
+  box-shadow: 0 4px 18px rgba(0,0,0,.11);
 }
 .login-name-btn:active {
-  transform: scale(.98);
-  box-shadow: 0 1px 6px rgba(0,0,0,.08);
+  transform: scale(.97);
+  box-shadow: 0 1px 5px rgba(0,0,0,.07);
 }
 
-/* Admin card — teal gradient */
+/* Admin card — full teal gradient pill */
 .login-name-btn.admin-btn {
-  background: linear-gradient(135deg, #0f766e, #0d9488);
-  box-shadow: 0 4px 18px rgba(13,148,136,.35);
+  background: linear-gradient(135deg, #0a5c52 0%, #0d9488 100%);
+  box-shadow: 0 4px 18px rgba(13,148,136,.32);
 }
 .admin-btn .ln-name { color: #fff; }
-.admin-btn .ln-tag  { color: rgba(255,255,255,.8); }
+.admin-btn .ln-tag  { color: rgba(255,255,255,.75); }
+.admin-btn .ln-av {
+  background: rgba(255,255,255,.2) !important;
+  box-shadow:
+    inset 0 -4px 8px rgba(0,0,0,.15),
+    inset 0 3px 6px rgba(255,255,255,.25);
+}
 
-/* Glossy orb avatar */
+/* ── Glossy orb avatar ────────────────────────────── */
 .ln-av {
-  width: 58px;
-  height: 58px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 900;
   color: #fff;
   position: relative;
-  /* 3-D gloss effect */
+  /* 3-D orb shading */
   box-shadow:
-    inset 0 -6px 14px rgba(0,0,0,.22),
-    inset 0 5px 10px rgba(255,255,255,.38),
-    0 4px 14px rgba(0,0,0,.18);
+    inset 0 -5px 12px rgba(0,0,0,.22),
+    inset 0 4px 8px rgba(255,255,255,.35),
+    0 3px 10px rgba(0,0,0,.15);
 }
-/* Specular highlight on the orb */
+/* Specular highlight */
 .ln-av::after {
   content: '';
   position: absolute;
-  top: 12%; left: 16%;
-  width: 38%; height: 28%;
-  background: radial-gradient(ellipse, rgba(255,255,255,.55) 0%, transparent 70%);
+  top: 11%; left: 15%;
+  width: 36%; height: 26%;
+  background: radial-gradient(ellipse, rgba(255,255,255,.6) 0%, transparent 70%);
   border-radius: 50%;
   pointer-events: none;
 }
 
-/* Text block */
+/* ── Text ─────────────────────────────────────────── */
 .ln-info { flex: 1; min-width: 0; }
 .ln-name {
   font-size: 15px;
   font-weight: 900;
   color: #1c1c1e;
   line-height: 1.2;
+  letter-spacing: -.1px;
 }
 .ln-tag {
   font-size: 11px;
   font-weight: 600;
   color: #8e8e93;
-  margin-top: 3px;
+  margin-top: 2px;
+  line-height: 1.3;
 }
 
 /* ══ HEADER ═════════════════════════════════════════ */
@@ -517,15 +514,15 @@ body{
 /* ══ WORKLOAD BADGES on login name buttons ════════════════════════ */
 .ln-badges {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   align-items: center;
   flex-shrink: 0;
   margin-left: auto;
 }
 .ln-badge {
-  min-width: 22px;
-  height: 22px;
-  border-radius: 11px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
   font-size: 10px;
   font-weight: 900;
   display: flex;
@@ -533,7 +530,7 @@ body{
   justify-content: center;
   padding: 0 5px;
   line-height: 1;
-  box-shadow: 0 1px 4px rgba(0,0,0,.15);
+  box-shadow: 0 1px 4px rgba(0,0,0,.12);
 }
 
 /* ══ FORECAST BANNER ══════════════════════════════════════════════ */
