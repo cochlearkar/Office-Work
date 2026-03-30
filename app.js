@@ -31,7 +31,8 @@ let currentUser  = null;   // name string
 let isAdmin      = false;
 
 // ── App state ──────────────────────────────────────
-let allTasks     = [];
+let allTasks       = [];
+let tasksPreloaded = false;   // true once loadTasksForLoginBadges has resolved
 let selectedPri  = "p4";
 let editPri      = "p4";
 let editId       = null;
@@ -57,7 +58,12 @@ async function loadTasksForLoginBadges() {
   try {
     const snap = await getDocs(collection(db,"tasks"));
     allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
-    buildLoginScreen();  // re-render with counts populated
+    tasksPreloaded = true;
+    buildLoginScreen();           // refresh login badges
+    if (currentUser) {            // user already logged in while we were fetching
+      loadMessageCounts().catch(() => {});
+      renderCurrentView();        // render dashboard immediately with fresh data
+    }
   } catch(e) { console.warn("Badge preload:", e.message); }
 }
 
@@ -162,7 +168,17 @@ function loginAs(name) {
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
 
-  loadTasks();
+  if (tasksPreloaded) {
+    // Data already available — render instantly, no spinner needed
+    loadMessageCounts().catch(() => {});
+    if (isAdmin) { populateAssignSelect(); }
+    renderCurrentView();
+  } else {
+    // Pre-fetch still in progress — show spinner; loadTasksForLoginBadges will
+    // call renderCurrentView() once it finishes (see above)
+    dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
+    if (isAdmin) { populateAssignSelect(); updateAdminStats(); }
+  }
 }
 
 window.logout = function() {
@@ -242,11 +258,24 @@ function buildTop3Urgent() {
   </div>`;
 }
 
-// ── Load tasks ─────────────────────────────────────
+// ── renderCurrentView: single entry point for all dashboard renders ──────────
+function renderCurrentView() {
+  if (isAdmin) {
+    populateAssignSelect();
+    if (urgentView) renderUrgentView();
+    else            renderAdminDashboard();
+    updateAdminStats();
+  } else {
+    renderStaffView();
+  }
+}
+
+// ── Load tasks (used after mutations: add/edit/delete/toggle) ────────────────
 async function loadTasks(keepView = false) {
   try {
     const snap = await getDocs(collection(db,"tasks"));
     allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
+    tasksPreloaded = true;
   } catch(e) {
     console.error(e);
     showToast("Cannot reach database","error");
@@ -254,20 +283,7 @@ async function loadTasks(keepView = false) {
   }
   // Load message counts for chat badges (non-blocking)
   loadMessageCounts().catch(() => {});
-
-  if(isAdmin) {
-    if(!keepView) {
-      populateAssignSelect();
-      selectDepartment(currentDept);
-    } else {
-      populateAssignSelect();
-      if(urgentView) renderUrgentView();
-      else renderAdminDashboard();
-      updateAdminStats();
-    }
-  } else {
-    renderStaffView();
-  }
+  renderCurrentView();
 }
 
 // ── ADMIN ──────────────────────────────────────────
@@ -1100,4 +1116,3 @@ window.chatKeydown = function(e) {
     sendChatMessage();
   }
 };
-
