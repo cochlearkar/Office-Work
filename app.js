@@ -174,11 +174,11 @@ function loginAs(name) {
     .then(snap => {
       allTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       renderCurrentView();
-      loadMessageCounts().catch(() => {});
+      loadMessageCounts();
     })
     .catch(err => {
-      console.error("Initial fetch failed:", err.message);
-      showToast("Cannot reach database", "error");
+      // Silently ignore — live onSnapshot listener will still load data
+      console.warn("Initial fetch failed:", err.message);
     });
 
   // ── Live listener: keeps data fresh after the initial render ─────────────
@@ -293,7 +293,7 @@ async function loadTasks(keepView = false) {
     showToast("Cannot reach database","error");
     return;
   }
-  loadMessageCounts().catch(() => {});
+  loadMessageCounts();
   renderCurrentView();
 }
 
