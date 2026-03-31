@@ -165,26 +165,31 @@ function loginAs(name) {
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
 
-  // Show spinner immediately so user sees something while first data arrives
+  // Show spinner immediately
   dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
   if (isAdmin) { populateAssignSelect(); }
 
-  // Tear down any previous listener
-  if (taskListUnsub) { taskListUnsub(); taskListUnsub = null; }
+  // ── Immediate fetch: renders tasks as fast as possible ───────────────────
+  getDocs(collection(db, "tasks"))
+    .then(snap => {
+      allTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderCurrentView();
+      loadMessageCounts().catch(() => {});
+    })
+    .catch(err => {
+      console.error("Initial fetch failed:", err.message);
+      showToast("Cannot reach database", "error");
+    });
 
-  // onSnapshot fires immediately with current data, then on every change.
-  // With Firestore's local cache this is instant on repeat visits.
+  // ── Live listener: keeps data fresh after the initial render ─────────────
+  if (taskListUnsub) { taskListUnsub(); taskListUnsub = null; }
   taskListUnsub = onSnapshot(
     collection(db, "tasks"),
     snap => {
       allTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      loadMessageCounts().catch(() => {});
       renderCurrentView();
     },
-    err => {
-      console.error("Task listener:", err.message);
-      showToast("Cannot reach database", "error");
-    }
+    err => { console.error("Live listener error:", err.message); }
   );
 }
 
@@ -278,26 +283,18 @@ function renderCurrentView() {
   }
 }
 
-// ── loadTasks: called after mutations (add/edit/delete/toggle) ───────────────
-// onSnapshot handles re-rendering automatically when Firestore data changes,
-// so this is now a lightweight wrapper that just triggers a re-render
-// using the latest allTasks already populated by the live listener.
+// ── loadTasks: fetch fresh data and re-render (called after mutations) ───────
 async function loadTasks(keepView = false) {
-  // onSnapshot listener will fire and re-render automatically.
-  // If somehow the listener is not active (edge case), do a manual fetch.
-  if (!taskListUnsub) {
-    try {
-      const snap = await getDocs(collection(db,"tasks"));
-      allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
-    } catch(e) {
-      console.error(e);
-      showToast("Cannot reach database","error");
-    }
-    loadMessageCounts().catch(() => {});
-    renderCurrentView();
+  try {
+    const snap = await getDocs(collection(db,"tasks"));
+    allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
+  } catch(e) {
+    console.error(e);
+    showToast("Cannot reach database","error");
+    return;
   }
-  // If listener is active: it will fire on its own when Firestore updates.
-  // No manual re-render needed — avoids double-render flicker.
+  loadMessageCounts().catch(() => {});
+  renderCurrentView();
 }
 
 // ── ADMIN ──────────────────────────────────────────
