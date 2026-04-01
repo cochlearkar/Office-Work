@@ -40,22 +40,12 @@
         </div>
       </div>
       <div class="header-right">
-        <!-- Calendar toggle -->
-        <button class="hdr-btn" onclick="toggleCalendarOverlay()" title="Calendar" id="calBtn">📅</button>
-        <!-- Call reminders toggle -->
-        <button class="hdr-btn" onclick="toggleCallsPanel()" title="Call Reminders" id="callBtn">📞</button>
         <!-- admin only -->
         <button class="hdr-btn" id="exportBtn" onclick="exportTasks()" title="Export" style="display:none">📤</button>
         <button class="hdr-btn logout-btn" onclick="logout()" title="Switch user">⇄</button>
       </div>
     </div>
   </header>
-
-  <!-- ── WEEK CALENDAR STRIP (always visible under header) ── -->
-  <div class="week-strip" id="weekStrip">
-    <div class="week-strip-inner" id="weekStripInner"></div>
-    <div class="week-strip-hint" id="weekStripHint">Tap a day to see tasks</div>
-  </div>
 
   <!-- ── ADMIN: dept tabs + stats strip ───────────── -->
   <div id="adminControls" style="display:none">
@@ -227,6 +217,7 @@
   </div>
 </div>
 
+
 <!-- ── ADMIN PIN OVERLAY ──────────────────── -->
 <div id="pinOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:24px">
   <div style="background:#fff;border-radius:20px;padding:32px 28px;width:100%;max-width:310px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.3)">
@@ -245,81 +236,13 @@
   </div>
 </div>
 
-<!-- ════════════════════════════════════════════════════
-     FULL CALENDAR OVERLAY
-════════════════════════════════════════════════════ -->
-<div class="cal-overlay" id="calOverlay" style="display:none" onclick="closeCalIfOutside(event)">
-  <div class="cal-sheet">
-    <div class="cal-header">
-      <button class="cal-nav-btn" onclick="calPrevMonth()">‹</button>
-      <div class="cal-month-label" id="calMonthLabel"></div>
-      <button class="cal-nav-btn" onclick="calNextMonth()">›</button>
-      <button class="cal-close-btn" onclick="toggleCalendarOverlay()">✕</button>
-    </div>
-    <div class="cal-weekdays">
-      <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
-    </div>
-    <div class="cal-grid" id="calGrid"></div>
-    <div class="cal-day-tasks" id="calDayTasks"></div>
-  </div>
-</div>
-
-<!-- ════════════════════════════════════════════════════
-     CALL REMINDERS PANEL (slides in from right)
-════════════════════════════════════════════════════ -->
-<div class="calls-overlay" id="callsOverlay" style="display:none" onclick="closeCallsIfOutside(event)">
-  <div class="calls-panel">
-    <div class="calls-header">
-      <div>
-        <div class="calls-title">📞 Call Reminders</div>
-        <div class="calls-sub">Scheduled calls & contacts</div>
-      </div>
-      <button class="calls-close-btn" onclick="toggleCallsPanel()">✕</button>
-    </div>
-
-    <!-- Today's calls -->
-    <div class="calls-today-strip" id="callsTodayStrip" style="display:none"></div>
-
-    <!-- Contact list -->
-    <div class="calls-list" id="callsList">
-      <div class="calls-empty" id="callsEmpty">
-        <div style="font-size:32px;margin-bottom:8px">📵</div>
-        <div style="font-size:13px;font-weight:700;color:#94a3b8">No call reminders yet</div>
-        <div style="font-size:11px;color:#cbd5e1;margin-top:4px">Add a contact below</div>
-      </div>
-    </div>
-
-    <!-- Add contact form -->
-    <div class="calls-add-form">
-      <div class="calls-form-title">➕ Add Call Reminder</div>
-      <input id="callName" class="calls-input" placeholder="Contact name (e.g. Dr Sharma)" />
-      <input id="callPhone" class="calls-input" placeholder="Phone number" type="tel" inputmode="numeric"/>
-      <div class="calls-row">
-        <select id="callDay" class="calls-select">
-          <option value="">Day of week</option>
-          <option value="0">Sunday</option>
-          <option value="1">Monday</option>
-          <option value="2">Tuesday</option>
-          <option value="3">Wednesday</option>
-          <option value="4">Thursday</option>
-          <option value="5">Friday</option>
-          <option value="6">Saturday</option>
-          <option value="daily">Every day</option>
-        </select>
-        <input id="callTime" class="calls-select" type="time" style="flex:1" placeholder="Time"/>
-      </div>
-      <input id="callNote" class="calls-input" placeholder="Note (optional — e.g. Follow up on report)" style="margin-bottom:10px"/>
-      <button class="calls-add-btn" onclick="addCallReminder()">Save Reminder</button>
-    </div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 <script type="module" src="app.js"></script>
-
 <!-- ── TASK CHAT OVERLAY ─────────────────────────── -->
 <div class="chat-overlay" id="chatOverlay" style="display:none" onclick="closeChatIfOutside(event)">
   <div class="chat-sheet">
+
+    <!-- Header -->
     <div class="chat-header">
       <button class="chat-back-btn" onclick="closeChat()">←</button>
       <div class="chat-header-info">
@@ -327,9 +250,13 @@
         <div class="chat-header-sub" id="chatAssignedTo"></div>
       </div>
     </div>
+
+    <!-- Messages -->
     <div class="chat-messages" id="chatMessages">
       <div class="chat-loading">Loading…</div>
     </div>
+
+    <!-- Input -->
     <div class="chat-input-bar">
       <textarea
         id="chatInput"
@@ -346,6 +273,7 @@
         </svg>
       </button>
     </div>
+
   </div>
 </div>
 
