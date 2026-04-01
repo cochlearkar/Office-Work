@@ -15,7 +15,6 @@ const employeesMap = {
 const deptNames = { child:"Child Health", oral:"Oral Health", ci:"Cochlear Implant" };
 const avatarColors = ["#0d9488","#7c3aed","#db2777","#d97706","#2563eb","#059669","#dc2626"];
 
-// All unique staff (preserving order, admin first)
 const allStaff = [
   "Dr Basavaraj",
   ...Object.values(employeesMap).flat()
@@ -27,7 +26,7 @@ const priLabel    = { p1:"Urgent", p2:"High", p3:"Normal", p4:"Low" };
 const priText     = { p1:"U", p2:"H", p3:"N", p4:"L" };
 
 // ── Session state ──────────────────────────────────
-let currentUser  = null;   // name string
+let currentUser  = null;
 let isAdmin      = false;
 
 // ── App state ──────────────────────────────────────
@@ -38,10 +37,24 @@ let editId       = null;
 let delId        = null;
 let currentDept  = "child";
 let urgentView   = false;
-let messageCounts = {};     // taskId -> count (for badges)
+let messageCounts = {};
 let activeChatUnsub = null;
 let messageCountUnsubs = [];
-let taskListUnsub = null;   // onSnapshot listener for tasks
+let taskListUnsub = null;
+
+// ── Calendar state ─────────────────────────────────
+let calViewDate    = new Date();
+let calSelectedDay = null;
+
+// ── Google Calendar (iCal) ─────────────────────────
+const ICAL_URL = "https://calendar.google.com/calendar/ical/ddchkar%40gmail.com/private-19359ce714835865f9f0c05ffeaf3339/basic.ics";
+const CORS_PROXY = "https://corsproxy.io/?";
+let gcalEvents = [];      // parsed events cache
+let gcalLastFetch = 0;    // timestamp of last fetch
+const GCAL_TTL = 5 * 60 * 1000; // re-fetch every 5 minutes
+
+// ── Call Reminders state ───────────────────────────
+let callReminders = [];  // stored in localStorage
 
 // ── DOM ────────────────────────────────────────────
 const loginScreen  = document.getElementById("loginScreen");
@@ -52,26 +65,21 @@ const loginNames   = document.getElementById("loginNames");
 
 // ── Boot: show login ────────────────────────────────
 buildLoginScreen();
-loadTasksForLoginBadges();  // fetch tasks so name buttons show workload counts
+loadCallReminders();
+loadTasksForLoginBadges();
 
 async function loadTasksForLoginBadges() {
-  // Pre-fetch just to show workload badges on the login screen.
-  // This does NOT affect the post-login data flow.
   try {
     const snap = await getDocs(collection(db,"tasks"));
     allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
-    buildLoginScreen();  // re-render name buttons with counts
+    buildLoginScreen();
   } catch(e) { console.warn("Badge preload:", e.message); }
 }
 
 function buildLoginScreen() {
   loginNames.innerHTML = "";
-
-  // Admin button
   const adminDiv = createNameBtn(ADMIN, true);
   loginNames.appendChild(adminDiv);
-
-  // Staff by dept — CI shares staff with Child, show once
   const shownStaff = new Set();
   Object.entries(employeesMap).forEach(([dept, emps]) => {
     if (dept === "ci") return;
@@ -90,8 +98,6 @@ function createNameBtn(name, admin, dept) {
   const idx      = allStaff.indexOf(name);
   const color    = avatarColors[idx % avatarColors.length];
   const initials = name.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
-
-  // Workload badges — urgent (red), overdue (amber), today (orange)
   let badgesHTML = "";
   if (!admin && allTasks.length > 0) {
     const mine    = allTasks.filter(t => t.assignedTo === name && t.status !== "completed");
@@ -106,7 +112,6 @@ function createNameBtn(name, admin, dept) {
       ${b(today,   "#fffbeb", "#b45309", "Today")}
     </div>`;
   }
-
   const btn = document.createElement("button");
   btn.className = "login-name-btn" + (admin ? " admin-btn" : "");
   btn.innerHTML = `
@@ -121,7 +126,7 @@ function createNameBtn(name, admin, dept) {
 }
 
 // ── Admin PIN ──────────────────────────────────────
-const ADMIN_PIN = "1234";  // ← change to your preferred PIN
+const ADMIN_PIN = "1234";
 
 function promptAdminPin() {
   document.getElementById("pinOverlay").style.display = "flex";
@@ -146,12 +151,9 @@ window.cancelAdminPin = function() {
 function loginAs(name) {
   currentUser = name;
   isAdmin     = (name === ADMIN);
-
-  // Show app, hide login
   loginScreen.style.display = "none";
   appScreen.style.display   = "block";
 
-  // Header
   const idx     = allStaff.indexOf(name);
   const color   = avatarColors[idx % avatarColors.length];
   const initials= name.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
@@ -160,34 +162,38 @@ function loginAs(name) {
   document.getElementById("headerName").textContent = name;
   document.getElementById("headerRole").textContent = isAdmin ? "Admin · All departments" : "Staff";
 
-  // Show/hide admin controls
   document.getElementById("adminControls").style.display = isAdmin ? "block" : "none";
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
 
-  // Show spinner immediately
   dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
   if (isAdmin) { populateAssignSelect(); }
 
-  // ── Immediate fetch: renders tasks as fast as possible ───────────────────
+  // Build week strip + fetch Google Calendar
+  buildWeekStrip();
+  checkTodayCallReminders();
+  fetchGcalEvents().then(() => {
+    buildWeekStrip();
+    renderTodayGcalStrip();
+    if (document.getElementById("calOverlay").style.display !== "none") renderCalendar();
+  });
+
   getDocs(collection(db, "tasks"))
     .then(snap => {
       allTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       renderCurrentView();
       loadMessageCounts();
+      buildWeekStrip(); // rebuild with task dots
     })
-    .catch(err => {
-      // Silently ignore — live onSnapshot listener will still load data
-      console.warn("Initial fetch failed:", err.message);
-    });
+    .catch(err => { console.warn("Initial fetch failed:", err.message); });
 
-  // ── Live listener: keeps data fresh after the initial render ─────────────
   if (taskListUnsub) { taskListUnsub(); taskListUnsub = null; }
   taskListUnsub = onSnapshot(
     collection(db, "tasks"),
     snap => {
       allTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       renderCurrentView();
+      buildWeekStrip();
     },
     err => { console.error("Live listener error:", err.message); }
   );
@@ -204,8 +210,527 @@ window.logout = function() {
   loginScreen.style.display = "flex";
 };
 
+// ══════════════════════════════════════════════════════
+// GOOGLE CALENDAR — iCal fetch + parser
+// ══════════════════════════════════════════════════════
 
-// ── Forecast banner + Top 3 Urgent ────────────────
+async function fetchGcalEvents(force = false) {
+  const now = Date.now();
+  if (!force && gcalEvents.length > 0 && (now - gcalLastFetch) < GCAL_TTL) return; // use cache
+
+  try {
+    const res  = await fetch(CORS_PROXY + encodeURIComponent(ICAL_URL));
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    gcalEvents    = parseIcal(text);
+    gcalLastFetch = now;
+  } catch (e) {
+    console.warn("Google Calendar fetch failed:", e.message);
+    // Silently fail — app still works without calendar events
+  }
+}
+
+function parseIcal(text) {
+  const events = [];
+  // Unfold lines (iCal lines can wrap with CRLF + space)
+  const unfolded = text.replace(/\r\n[ \t]/g, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const blocks   = unfolded.split("BEGIN:VEVENT");
+
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i];
+    const get   = (key) => {
+      // Match key or key;PARAMS
+      const m = block.match(new RegExp("^" + key + "(?:;[^:]+)?:(.+)$", "m"));
+      return m ? m[1].trim() : "";
+    };
+
+    const summary  = get("SUMMARY")  .replace(/\\,/g, ",").replace(/\\n/g, " ").replace(/\\/g, "");
+    const location = get("LOCATION") .replace(/\\,/g, ",").replace(/\\/g, "");
+    const desc     = get("DESCRIPTION").replace(/\\n/g, " ").replace(/\\,/g, ",").replace(/\\/g, "");
+
+    // Date parsing — handles DTSTART, DTSTART;VALUE=DATE, DTSTART;TZID=...
+    const dtStartRaw = get("DTSTART");
+    const dtEndRaw   = get("DTEND");
+    const start = parseIcalDate(dtStartRaw);
+    const end   = parseIcalDate(dtEndRaw);
+    if (!start || !summary) continue;
+
+    // Skip recurring expansion for now — just use RRULE events once at their start
+    events.push({ summary, location, desc, start, end, allDay: dtStartRaw.length === 8 });
+  }
+  return events;
+}
+
+function parseIcalDate(raw) {
+  if (!raw) return null;
+  raw = raw.replace(/[TZ]/g, d => d === "T" ? "T" : "");
+  // All-day: YYYYMMDD
+  if (/^\d{8}$/.test(raw)) {
+    return new Date(
+      parseInt(raw.slice(0,4)),
+      parseInt(raw.slice(4,6)) - 1,
+      parseInt(raw.slice(6,8))
+    );
+  }
+  // DateTime: YYYYMMDDTHHmmss[Z]
+  if (/^\d{15}Z?$/.test(raw.replace("T",""))) {
+    return new Date(
+      parseInt(raw.slice(0,4)),
+      parseInt(raw.slice(4,6)) - 1,
+      parseInt(raw.slice(6,8)),
+      parseInt(raw.slice(9,11)),
+      parseInt(raw.slice(11,13)),
+      parseInt(raw.slice(13,15))
+    );
+  }
+  return null;
+}
+
+// Get all gcal events on a specific date (local midnight comparison)
+function gcalEventsOnDate(date) {
+  const d = new Date(date); d.setHours(0,0,0,0);
+  return gcalEvents.filter(ev => {
+    if (!ev.start) return false;
+    const s = new Date(ev.start); s.setHours(0,0,0,0);
+    return s.getTime() === d.getTime();
+  }).sort((a,b) => a.start - b.start);
+}
+
+// Today's Google Calendar strip — shown on dashboard
+function renderTodayGcalStrip() {
+  const existing = document.getElementById("gcalTodayStrip");
+  if (existing) existing.remove();
+
+  const today  = new Date();
+  const events = gcalEventsOnDate(today);
+  if (!events.length) return;
+
+  const strip = document.createElement("div");
+  strip.id = "gcalTodayStrip";
+  strip.className = "gcal-today-strip";
+
+  const fmt = (d) => d ? d.toLocaleTimeString("en-IN", {hour:"2-digit", minute:"2-digit", hour12:true}) : "";
+
+  strip.innerHTML = `
+    <div class="gcal-strip-header">
+      <span class="gcal-strip-icon">📅</span>
+      <span class="gcal-strip-label">Today's Schedule</span>
+      <span class="gcal-strip-count">${events.length} event${events.length!==1?"s":""}</span>
+    </div>
+    <div class="gcal-strip-events">
+      ${events.map(ev => `
+        <div class="gcal-strip-event">
+          <div class="gcal-strip-time">${ev.allDay ? "All day" : fmt(ev.start)}</div>
+          <div class="gcal-strip-info">
+            <div class="gcal-strip-title">${ev.summary}</div>
+            ${ev.location ? `<div class="gcal-strip-loc">📍 ${ev.location}</div>` : ""}
+          </div>
+        </div>`).join("")}
+    </div>`;
+
+  // Insert at top of dashboard, after it renders
+  const db2 = document.getElementById("dashboard");
+  if (db2) db2.prepend(strip);
+}
+
+// ══════════════════════════════════════════════════════
+// WEEK STRIP — always-visible mini calendar under header
+// ══════════════════════════════════════════════════════
+function buildWeekStrip() {
+  const strip = document.getElementById("weekStripInner");
+  if (!strip) return;
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  // Show current week (Sun–Sat containing today)
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - today.getDay());
+
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(startOfWeek);
+    d.setDate(startOfWeek.getDate() + i);
+    days.push(d);
+  }
+
+  const dayNames = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+  strip.innerHTML = days.map(d => {
+    const isToday = d.getTime() === today.getTime();
+    const isPast  = d < today;
+    const dStr    = d.toISOString().slice(0,10);
+
+    // Count tasks due on this day
+    const taskCount = allTasks.filter(t => {
+      const td = safeDate(t.dueDate);
+      td.setHours(0,0,0,0);
+      return td.getTime() === d.getTime() && t.status !== "completed";
+    }).length;
+
+    // Check for call reminders on this weekday
+    const hasCall = callReminders.some(cr => {
+      if (cr.day === "daily") return true;
+      return parseInt(cr.day) === d.getDay();
+    });
+
+    // Google Calendar events on this day
+    const hasGcal = gcalEventsOnDate(d).length > 0;
+
+    return `<div class="ws-day ${isToday?"ws-today":""} ${isPast?"ws-past":""}"
+      onclick="openCalDayFromStrip('${dStr}')">
+      <div class="ws-day-name">${dayNames[d.getDay()]}</div>
+      <div class="ws-day-num">${d.getDate()}</div>
+      <div class="ws-dots">
+        ${taskCount > 0 ? `<span class="ws-dot ws-dot-task" title="${taskCount} task${taskCount!==1?'s':''}"></span>` : ""}
+        ${hasCall ? `<span class="ws-dot ws-dot-call" title="Call scheduled"></span>` : ""}
+        ${hasGcal ? `<span class="ws-dot ws-dot-gcal" title="Calendar event"></span>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+
+  // Update strip hint with today's task count
+  const todayTasks = allTasks.filter(t => {
+    const td = safeDate(t.dueDate); td.setHours(0,0,0,0);
+    return td.getTime() === today.getTime() && t.status !== "completed";
+  });
+  const hint = document.getElementById("weekStripHint");
+  if (hint) {
+    const todayGcal = gcalEventsOnDate(today);
+    const parts = [];
+    if (todayTasks.length > 0) parts.push(`${todayTasks.length} task${todayTasks.length!==1?"s":""} due`);
+    if (todayGcal.length  > 0) parts.push(`${todayGcal.length} meeting${todayGcal.length!==1?"s":""}`);
+    hint.textContent = parts.length ? parts.join(" · ") + " today · tap a day for details"
+                                    : "No events today · tap a day for details";
+  }
+}
+
+window.openCalDayFromStrip = function(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  calSelectedDay = d;
+  calViewDate    = new Date(d);
+  toggleCalendarOverlay(true);
+};
+
+// ══════════════════════════════════════════════════════
+// FULL CALENDAR OVERLAY
+// ══════════════════════════════════════════════════════
+window.toggleCalendarOverlay = function(open) {
+  const overlay = document.getElementById("calOverlay");
+  const isOpen  = overlay.style.display !== "none";
+  if (open === true || !isOpen) {
+    overlay.style.display = "flex";
+    renderCalendar();
+  } else {
+    overlay.style.display = "none";
+    calSelectedDay = null;
+  }
+};
+
+window.closeCalIfOutside = function(e) {
+  if (e.target === document.getElementById("calOverlay")) {
+    document.getElementById("calOverlay").style.display = "none";
+    calSelectedDay = null;
+  }
+};
+
+window.calPrevMonth = function() {
+  calViewDate.setMonth(calViewDate.getMonth() - 1);
+  renderCalendar();
+};
+window.calNextMonth = function() {
+  calViewDate.setMonth(calViewDate.getMonth() + 1);
+  renderCalendar();
+};
+
+function renderCalendar() {
+  const year  = calViewDate.getFullYear();
+  const month = calViewDate.getMonth();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  const monthNames = ["January","February","March","April","May","June",
+                      "July","August","September","October","November","December"];
+  document.getElementById("calMonthLabel").textContent = `${monthNames[month]} ${year}`;
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  let html = "";
+  // Empty cells before first day
+  for (let i = 0; i < firstDay; i++) html += `<div class="cal-cell cal-empty"></div>`;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month, d);
+    const isToday    = date.getTime() === today.getTime();
+    const isSelected = calSelectedDay &&
+      date.getDate()     === calSelectedDay.getDate() &&
+      date.getMonth()    === calSelectedDay.getMonth() &&
+      date.getFullYear() === calSelectedDay.getFullYear();
+    const isPast = date < today;
+
+    // Tasks on this day
+    const dayTasks = allTasks.filter(t => {
+      const td = safeDate(t.dueDate); td.setHours(0,0,0,0);
+      return td.getTime() === date.getTime() && t.status !== "completed";
+    });
+    const urgentOnDay = dayTasks.some(t => t.priority === "p1");
+    const hasTask = dayTasks.length > 0;
+
+    // Calls on this weekday
+    const hasCall = callReminders.some(cr =>
+      cr.day === "daily" || parseInt(cr.day) === date.getDay()
+    );
+
+    // Google Calendar events
+    const dayGcal  = gcalEventsOnDate(date);
+    const hasGcal  = dayGcal.length > 0;
+
+    let cls = "cal-cell";
+    if (isToday)    cls += " cal-today";
+    if (isSelected) cls += " cal-selected";
+    if (isPast && !isToday) cls += " cal-past";
+
+    const dateStr = date.toISOString().slice(0,10);
+    html += `<div class="${cls}" onclick="calSelectDay('${dateStr}')">
+      <span class="cal-cell-num">${d}</span>
+      <div class="cal-cell-dots">
+        ${urgentOnDay ? '<span class="cal-dot cal-dot-urgent"></span>' :
+          hasTask     ? '<span class="cal-dot cal-dot-task"></span>'   : ""}
+        ${hasGcal ? '<span class="cal-dot cal-dot-gcal"></span>' : ""}
+        ${hasCall ? '<span class="cal-dot cal-dot-call"></span>' : ""}
+      </div>
+    </div>`;
+  }
+
+  document.getElementById("calGrid").innerHTML = html;
+
+  // Show selected day tasks
+  if (calSelectedDay) renderCalDayTasks(calSelectedDay);
+  else document.getElementById("calDayTasks").innerHTML = "";
+}
+
+window.calSelectDay = function(dateStr) {
+  calSelectedDay = new Date(dateStr + "T00:00:00");
+  renderCalendar();
+};
+
+function renderCalDayTasks(date) {
+  const container = document.getElementById("calDayTasks");
+  const dayLabel  = date.toLocaleDateString("en-IN", {weekday:"long", day:"numeric", month:"long"});
+
+  const dayTasks = allTasks.filter(t => {
+    const td = safeDate(t.dueDate); td.setHours(0,0,0,0);
+    return td.getTime() === date.getTime();
+  });
+
+  const dayCalls  = callReminders.filter(cr =>
+    cr.day === "daily" || parseInt(cr.day) === date.getDay()
+  );
+  const dayEvents = gcalEventsOnDate(date);
+
+  const fmt = (d) => d ? d.toLocaleTimeString("en-IN", {hour:"2-digit", minute:"2-digit", hour12:true}) : "";
+
+  let html = `<div class="cal-day-header">${dayLabel}</div>`;
+
+  if (!dayTasks.length && !dayCalls.length && !dayEvents.length) {
+    html += `<div class="cal-day-empty">Nothing scheduled</div>`;
+    container.innerHTML = html;
+    return;
+  }
+
+  // Google Calendar events — shown first (meetings before tasks)
+  if (dayEvents.length) {
+    html += `<div class="cal-section-label">📅 Google Calendar</div>`;
+    dayEvents.forEach(ev => {
+      html += `<div class="cal-task-row cal-gcal-row">
+        <div class="cal-task-dot" style="background:#4285f4"></div>
+        <div class="cal-task-info">
+          <div class="cal-task-title">${ev.summary}</div>
+          <div class="cal-task-assignee">
+            ${ev.allDay ? "All day" : fmt(ev.start) + (ev.end ? " – " + fmt(ev.end) : "")}
+            ${ev.location ? " · 📍 " + ev.location : ""}
+          </div>
+          ${ev.desc ? `<div class="cal-task-desc">${ev.desc.slice(0,80)}${ev.desc.length>80?"…":""}</div>` : ""}
+        </div>
+      </div>`;
+    });
+  }
+
+  // Tasks
+  if (dayTasks.length) {
+    html += `<div class="cal-section-label">✅ Office Tasks</div>`;
+    dayTasks.forEach(t => {
+      const priColors = { p1:"#dc2626", p2:"#ea580c", p3:"#3b82f6", p4:"#94a3b8" };
+      const c = priColors[t.priority] || "#94a3b8";
+      const done = t.status === "completed";
+      html += `<div class="cal-task-row" style="border-left-color:${c}">
+        <div class="cal-task-dot" style="background:${c}"></div>
+        <div class="cal-task-info">
+          <div class="cal-task-title ${done?"cal-task-done":""}">${t.title}</div>
+          <div class="cal-task-assignee">${t.assignedTo || ""} · ${priLabel[t.priority]||""}</div>
+        </div>
+        ${done ? '<div class="cal-task-badge cal-done-badge">✓ Done</div>' : ""}
+      </div>`;
+    });
+  }
+
+  // Calls
+  if (dayCalls.length) {
+    html += `<div class="cal-section-label">📞 Call Reminders</div>`;
+    dayCalls.forEach(cr => {
+      html += `<div class="cal-task-row cal-call-row">
+        <div class="cal-task-dot" style="background:#059669"></div>
+        <div class="cal-task-info">
+          <div class="cal-task-title">${cr.name}</div>
+          <div class="cal-task-assignee">${cr.time || "Any time"} ${cr.note ? "· " + cr.note : ""}</div>
+        </div>
+        <a href="tel:${cr.phone}" class="cal-call-dial" title="Dial">📲</a>
+      </div>`;
+    });
+  }
+
+  container.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════
+// CALL REMINDERS — localStorage-based
+// ══════════════════════════════════════════════════════
+function loadCallReminders() {
+  try {
+    callReminders = JSON.parse(localStorage.getItem("taskflow_calls") || "[]");
+  } catch(e) { callReminders = []; }
+}
+
+function saveCallReminders() {
+  localStorage.setItem("taskflow_calls", JSON.stringify(callReminders));
+}
+
+function checkTodayCallReminders() {
+  const today = new Date();
+  const todayDay = today.getDay();
+  const nowMins  = today.getHours() * 60 + today.getMinutes();
+
+  const todayCalls = callReminders.filter(cr => {
+    return cr.day === "daily" || parseInt(cr.day) === todayDay;
+  });
+
+  const strip = document.getElementById("callsTodayStrip");
+  if (!strip) return;
+
+  if (todayCalls.length === 0) { strip.style.display = "none"; return; }
+
+  strip.style.display = "block";
+  strip.innerHTML = `
+    <div class="calls-today-label">📅 Today's Calls (${todayCalls.length})</div>
+    ${todayCalls.map(cr => `
+      <div class="calls-today-row">
+        <div class="calls-today-info">
+          <div class="calls-today-name">${cr.name}</div>
+          <div class="calls-today-meta">${cr.time || "Any time"} ${cr.note ? "· " + cr.note : ""}</div>
+        </div>
+        <a href="tel:${cr.phone}" class="calls-dial-btn" title="Call ${cr.name}">📲 Dial</a>
+      </div>`).join("")}`;
+
+  // Badge on header call button
+  const callBtn = document.getElementById("callBtn");
+  if (callBtn) {
+    callBtn.style.position = "relative";
+    callBtn.innerHTML = `📞<span style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;background:#dc2626;color:#fff;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;border:1.5px solid rgba(255,255,255,.3)">${todayCalls.length}</span>`;
+  }
+}
+
+window.toggleCallsPanel = function() {
+  const ov = document.getElementById("callsOverlay");
+  const isOpen = ov.style.display !== "none";
+  if (isOpen) { ov.style.display = "none"; return; }
+  ov.style.display = "flex";
+  renderCallsList();
+  checkTodayCallReminders();
+};
+
+window.closeCallsIfOutside = function(e) {
+  if (e.target === document.getElementById("callsOverlay"))
+    document.getElementById("callsOverlay").style.display = "none";
+};
+
+function renderCallsList() {
+  const list  = document.getElementById("callsList");
+  const empty = document.getElementById("callsEmpty");
+  if (!callReminders.length) {
+    empty.style.display = "block";
+    list.innerHTML = "";
+    list.appendChild(empty);
+    return;
+  }
+  empty.style.display = "none";
+
+  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const today = new Date().getDay();
+
+  list.innerHTML = callReminders.map((cr, i) => {
+    const isToday = cr.day === "daily" || parseInt(cr.day) === today;
+    const dayLabel = cr.day === "daily" ? "Every day" : dayNames[parseInt(cr.day)];
+    return `<div class="call-card ${isToday?"call-card-today":""}">
+      <div class="call-card-left">
+        <div class="call-avatar">📞</div>
+        <div class="call-info">
+          <div class="call-name">${cr.name}</div>
+          <div class="call-meta">${dayLabel} ${cr.time ? "at " + cr.time : ""}</div>
+          ${cr.note ? `<div class="call-note">${cr.note}</div>` : ""}
+        </div>
+      </div>
+      <div class="call-card-right">
+        ${isToday ? '<div class="call-today-badge">Today</div>' : ""}
+        <a href="tel:${cr.phone}" class="call-dial-link" title="Dial ${cr.phone}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.71A2 2 0 012 1h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 8.91A16 16 0 0015.1 17.9l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 19z"></path>
+          </svg>
+        </a>
+        <button class="call-del-btn" onclick="deleteCallReminder(${i})" title="Delete">🗑</button>
+      </div>
+    </div>`;
+  }).join("");
+  list.appendChild(empty); // keep it in DOM
+}
+
+window.addCallReminder = function() {
+  const name  = document.getElementById("callName").value.trim();
+  const phone = document.getElementById("callPhone").value.trim();
+  const day   = document.getElementById("callDay").value;
+  const time  = document.getElementById("callTime").value;
+  const note  = document.getElementById("callNote").value.trim();
+
+  if (!name)  { showToast("Enter contact name","error"); return; }
+  if (!phone) { showToast("Enter phone number","error"); return; }
+  if (!day)   { showToast("Select a day","error"); return; }
+
+  callReminders.push({ name, phone, day, time, note, addedAt: Date.now() });
+  saveCallReminders();
+
+  // Clear form
+  ["callName","callPhone","callTime","callNote"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("callDay").value = "";
+
+  renderCallsList();
+  checkTodayCallReminders();
+  buildWeekStrip();
+  if (calViewDate) renderCalendar();
+  showToast("Call reminder saved ✓","success");
+};
+
+window.deleteCallReminder = function(idx) {
+  callReminders.splice(idx, 1);
+  saveCallReminders();
+  renderCallsList();
+  checkTodayCallReminders();
+  buildWeekStrip();
+  if (document.getElementById("calOverlay").style.display !== "none") renderCalendar();
+  showToast("Deleted","");
+};
+
+// ══════════════════════════════════════════════════════
+// EXISTING CODE (unchanged)
+// ══════════════════════════════════════════════════════
+
 function buildForecastBanner() {
   const active  = allTasks.filter(t => t.status !== "completed");
   const overdue = active.filter(t => diffDays(t) < 0);
@@ -244,8 +769,6 @@ function buildTop3Urgent() {
     const idx     = allStaff.indexOf(emp);
     const color   = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
     const initials= emp.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
-
-    // Right-side bubble: overdue days (red), due today (amber), upcoming (grey)
     let bubble = "";
     if (diff < 0) {
       bubble = `<div class="up-bubble up-bubble-over">${Math.abs(diff)}d</div>`;
@@ -254,7 +777,6 @@ function buildTop3Urgent() {
     } else {
       bubble = `<div class="up-bubble up-bubble-soon">${diff}d</div>`;
     }
-
     return `<div class="up-row">
       <div class="up-av" style="background:${color}">${initials}</div>
       <div class="up-content">
@@ -271,7 +793,6 @@ function buildTop3Urgent() {
   </div>`;
 }
 
-// ── renderCurrentView: single entry point for all dashboard renders ──────────
 function renderCurrentView() {
   if (isAdmin) {
     populateAssignSelect();
@@ -281,9 +802,10 @@ function renderCurrentView() {
   } else {
     renderStaffView();
   }
+  // Always re-inject today's Google Calendar strip at top of dashboard
+  renderTodayGcalStrip();
 }
 
-// ── loadTasks: fetch fresh data and re-render (called after mutations) ───────
 async function loadTasks(keepView = false) {
   try {
     const snap = await getDocs(collection(db,"tasks"));
@@ -297,7 +819,6 @@ async function loadTasks(keepView = false) {
   renderCurrentView();
 }
 
-// ── ADMIN ──────────────────────────────────────────
 window.selectDepartment = function(d) {
   urgentView  = false;
   currentDept = d;
@@ -341,7 +862,6 @@ function updateAdminStats() {
     <div class="stat-pill sp-urg"><div class="snum">${urg}</div><div class="slbl">Urgent</div></div>`;
 }
 
-// ── Admin: normal dept view ────────────────────────
 function renderAdminDashboard() {
   dashboard.innerHTML = buildForecastBanner() + buildTop3Urgent();
   const emps    = employeesMap[currentDept];
@@ -351,11 +871,9 @@ function renderAdminDashboard() {
     const empTasks  = deptAll.filter(t=>t.assignedTo===emp);
     const active    = empTasks.filter(t=>t.status!=="completed");
     const overdueCnt= active.filter(t=>diffDays(t)<0).length;
-
     const color    = avatarColors[allStaff.indexOf(emp) % avatarColors.length];
     const initials = emp.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
 
-    // Section header
     const head = document.createElement("div");
     head.className = "admin-emp-head";
     head.innerHTML = `
@@ -423,7 +941,6 @@ function buildAdminTaskRow(t) {
   return row;
 }
 
-// ── Admin: Urgent view (cross-dept overdue + today) ─
 function renderUrgentView() {
   dashboard.innerHTML = buildForecastBanner();
   const urgent = allTasks.filter(t=>t.status!=="completed"&&diffDays(t)<=0);
@@ -451,12 +968,10 @@ function renderUrgentView() {
   allStaff.forEach((emp, ei) => {
     const empTasks = urgent.filter(t=>t.assignedTo===emp);
     if(!empTasks.length) return;
-
     const color    = avatarColors[ei%avatarColors.length];
     const initials = emp.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
     const overdue  = empTasks.filter(t=>diffDays(t)<0);
     const today    = empTasks.filter(t=>diffDays(t)===0);
-
     const head = document.createElement("div");
     head.className = "admin-emp-head";
     head.innerHTML = `
@@ -464,7 +979,6 @@ function renderUrgentView() {
       <div class="admin-emp-name">${emp}</div>
       <div class="admin-emp-count">${overdue.length?" ⚠"+overdue.length+" overdue":""} ${today.length?today.length+" today":""}</div>`;
     dashboard.appendChild(head);
-
     [[overdue,"Overdue","dot-overdue"],[today,"Today","dot-today"]].forEach(([list,lbl,dot])=>{
       if(!list.length) return;
       const sl = document.createElement("div");
@@ -478,7 +992,6 @@ function renderUrgentView() {
   });
 }
 
-// ── STAFF VIEW ─────────────────────────────────────
 function renderStaffView() {
   dashboard.innerHTML = buildForecastBanner() + buildTop3Urgent();
 
@@ -509,9 +1022,6 @@ function renderStaffView() {
     dashboard.appendChild(el);
     return;
   }
-
-  // Stats shown in staffStrip above — no duplicate name card needed
-
 
   const priChip = (t) => {
     const colors = {p1:"var(--c-u)", p2:"var(--c-h)", p3:"var(--c-n)", p4:"var(--c-l)"};
@@ -548,27 +1058,11 @@ function renderStaffView() {
     card.appendChild(hdr);
     const block = document.createElement("div");
     block.className = "mts-block";
-
     block.innerHTML = sec.tasks.map(sec.rowFn).join("");
     card.appendChild(block);
     dashboard.appendChild(card);
   });
 }
-
-function buildStaffCard(t) {
-  const done = t.status === "completed";
-  const diff = diffDays(t);
-  const dueInfo = dueChip(diff, done);
-  const card = document.createElement("div");
-  card.className = `staff-task-card ${cardClass(diff,done)}`;
-  card.innerHTML = `<div class="stc-body">
-    <div class="stc-pri ${priDotClass[t.priority||"p4"]}">${priText[t.priority||"p4"]}</div>
-    <div class="stc-main"><div class="stc-title">${t.title}</div>
-      <div style="margin-top:4px"><span class="stc-due ${dueInfo.cls}">${dueInfo.txt}</span></div>
-    </div></div>`;
-  return card;
-}
-
 
 // ── Admin actions ──────────────────────────────────
 window.selectPriority = function(p) {
@@ -581,7 +1075,6 @@ window.selectEditPriority = function(p) {
   ["ep1","ep2","ep3","ep4"].forEach(id=>document.getElementById(id)?.classList.remove("selected"));
   document.getElementById("e"+p)?.classList.add("selected");
 };
-
 window.onRepeatChange = function(sel) {
   document.getElementById("customDaysWrap").style.display = sel.value==="custom"?"flex":"none";
 };
@@ -598,14 +1091,10 @@ function getRepeatValue(selId, custId) {
   return v;
 }
 
-
-// ── Show office-wide urgent/overdue tasks (staff view — read only) ──────────
 window.showOfficeUrgent = function(mode) {
   const existing = document.getElementById("officeUrgentOverlay");
   if (existing) existing.remove();
-
-  let tasks;
-  let title, sub;
+  let tasks, title, sub;
   if (mode === "overdue") {
     tasks = allTasks.filter(t => t.status !== "completed" && diffDays(t) < 0);
     title = "⚠ Overdue Tasks — All Staff";
@@ -627,7 +1116,6 @@ window.showOfficeUrgent = function(mode) {
   const priLabels = {p1:"🔴 Urgent", p2:"🟠 High", p3:"🔵 Normal", p4:"⚪ Low"};
   const priCls    = {p1:"mts-p1", p2:"mts-p2", p3:"mts-p3", p4:"mts-p4"};
 
-  // Group by employee
   const grouped = {};
   tasks.forEach(t => {
     if (!grouped[t.assignedTo]) grouped[t.assignedTo] = [];
@@ -681,13 +1169,10 @@ window.addTask = async function() {
   const emp    = document.getElementById("assignTo").value;
   const days   = parseInt(document.getElementById("days").value)||0;
   const repeat = getRepeatValue("repeat","customDays");
-
   if(!title){ showToast("Enter a task","error"); return; }
   if(!emp)  { showToast("Select who to assign","error"); return; }
-
   const due = new Date(); due.setHours(0,0,0,0);
   due.setDate(due.getDate()+days);
-
   const btn=document.getElementById("mainBtn");
   btn.textContent="…"; btn.disabled=true;
   try {
@@ -709,7 +1194,6 @@ window.toggleTask = async function(id, checked) {
     await updateDoc(doc(db,"tasks",id),{status:checked?"completed":"pending"});
     showToast(checked?"Done! 🎉":"Reopened",checked?"success":"");
     await loadTasks(true);
-
     if(checked){
       setTimeout(async()=>{
         const t=allTasks.find(t=>t.id===id);
@@ -744,7 +1228,6 @@ window.openEditModal = function(id) {
   const presets=[0,1,2,3,5,7];
   const best=diff>=0?presets.reduce((a,b)=>Math.abs(b-diff)<Math.abs(a-diff)?b:a,0):0;
   document.getElementById("editDays").value=best;
-
   const knownRepeats=["none","daily","weekly"];
   const erSel=document.getElementById("editRepeat");
   const ecWrap=document.getElementById("editCustomDaysWrap");
@@ -755,7 +1238,6 @@ window.openEditModal = function(id) {
     document.getElementById("editCustomDays").value=t.repeat||"";
     ecWrap.style.display="flex";
   }
-
   ["ep1","ep2","ep3","ep4"].forEach(id=>document.getElementById(id)?.classList.remove("selected"));
   document.getElementById("e"+editPri)?.classList.add("selected");
   document.getElementById("editModal").style.display="flex";
@@ -880,7 +1362,7 @@ function showToast(msg,type=""){
   setTimeout(()=>toastEl.className="toast",2800);
 }
 
-// ── FAB: Add Task (all staff) ──────────────────────────────────────────────
+// ── FAB ──────────────────────────────────────────
 let fabPri = "p4";
 
 window.openFabModal = function() {
@@ -891,8 +1373,6 @@ window.openFabModal = function() {
   document.getElementById("fabDays").value = "0";
   document.getElementById("fabRepeat") && (document.getElementById("fabRepeat").value = "none");
   document.getElementById("fabCustomDaysWrap") && (document.getElementById("fabCustomDaysWrap").style.display = "none");
-
-  // Admin sees assign-to + repeat; staff sees their own name only
   const adminExtra = document.getElementById("fabAdminExtra");
   if (isAdmin) {
     adminExtra.style.display = "block";
@@ -901,40 +1381,31 @@ window.openFabModal = function() {
   } else {
     adminExtra.style.display = "none";
   }
-
   document.getElementById("staffAddModal").style.display = "flex";
   setTimeout(() => document.getElementById("fabTaskTitle").focus(), 100);
 };
-
 window.closeFabModal = function() {
   document.getElementById("staffAddModal").style.display = "none";
 };
-
 window.closeFabIfOutside = function(e) {
   if (e.target === document.getElementById("staffAddModal")) closeFabModal();
 };
-
 window.setFabPri = function(p) {
   fabPri = p;
   ["fp1","fp2","fp3","fp4"].forEach(id => document.getElementById(id)?.classList.remove("selected"));
   document.getElementById("f"+p)?.classList.add("selected");
 };
-
 window.onFabRepeatChange = function(sel) {
   document.getElementById("fabCustomDaysWrap").style.display = sel.value === "custom" ? "flex" : "none";
 };
-
 window.submitFabTask = async function() {
   const title = document.getElementById("fabTaskTitle").value.trim();
   if (!title) { showToast("Enter a task", "error"); return; }
-
   const days = parseInt(document.getElementById("fabDays").value) || 0;
   const due  = new Date(); due.setHours(0,0,0,0); due.setDate(due.getDate() + days);
-
   let assignedTo, department, repeat = "none";
   if (isAdmin) {
     assignedTo = document.getElementById("fabAdminAssign").value;
-    // derive dept from current tab
     department = urgentView ? "child" : currentDept;
     const repeatSel = document.getElementById("fabRepeat").value;
     if (repeatSel === "custom") {
@@ -944,10 +1415,8 @@ window.submitFabTask = async function() {
     }
   } else {
     assignedTo = currentUser;
-    // pick first dept this user belongs to
     department = Object.entries(employeesMap).find(([,arr]) => arr.includes(currentUser))?.[0] || "child";
   }
-
   const btn = document.getElementById("fabSaveBtn");
   btn.textContent = "…"; btn.disabled = true;
   try {
@@ -963,11 +1432,7 @@ window.submitFabTask = async function() {
   btn.textContent = "Add Task"; btn.disabled = false;
 };
 
-// ══════════════════════════════════════════════════════════════════════════════
-// TASK CHAT SYSTEM
-// ══════════════════════════════════════════════════════════════════════════════
-
-// ── Live message-count listeners ──────────────────────────────────────────
+// ── Chat ──────────────────────────────────────────
 function loadMessageCounts() {
   messageCountUnsubs.forEach(fn => fn());
   messageCountUnsubs = [];
@@ -985,9 +1450,6 @@ function loadMessageCounts() {
   });
 }
 
-function updateAllChatBadges() {
-  Object.entries(messageCounts).forEach(([id, count]) => updateBadge(id, count));
-}
 function updateBadge(taskId, count) {
   document.querySelectorAll("[id='cb-" + taskId + "']").forEach(badge => {
     if (count > 0) { badge.textContent = count > 9 ? "9+" : count; badge.style.display = "flex"; }
@@ -995,16 +1457,11 @@ function updateBadge(taskId, count) {
   });
 }
 
-// ── Open chat overlay for a task ──────────────────────────────────────────
 window.openChat = function(taskId) {
-  // Look up task details from allTasks
   const task = allTasks.find(t => t.id === taskId) || {};
   const taskTitle  = task.title    || "Task";
   const assignedTo = task.assignedTo || "";
-
-  // Clean up any previous listener
   if (activeChatUnsub) { activeChatUnsub(); activeChatUnsub = null; }
-
   const overlay = document.getElementById("chatOverlay");
   document.getElementById("chatTaskTitle").textContent = taskTitle;
   document.getElementById("chatAssignedTo").textContent = assignedTo ? "Assigned to: " + assignedTo : "";
@@ -1013,27 +1470,20 @@ window.openChat = function(taskId) {
   document.getElementById("chatSendBtn").dataset.taskId = taskId;
   overlay.style.display = "flex";
   overlay.dataset.taskId = taskId;
-
-  // Real-time listener
   const msgsRef = query(
     collection(db, "tasks", taskId, "messages"),
     orderBy("createdAt", "asc")
   );
-
   activeChatUnsub = onSnapshot(msgsRef, snap => {
     const msgs = snap.docs.map(d => ({id: d.id, ...d.data()}));
     renderChatMessages(msgs);
-    // update badge count
     messageCounts[taskId] = msgs.length;
     const badge = document.getElementById("cb-" + taskId);
     if (badge) {
       badge.textContent = msgs.length > 9 ? "9+" : msgs.length;
       badge.style.display = msgs.length > 0 ? "flex" : "none";
     }
-  }, err => {
-    console.error("Chat listener:", err);
-  });
-
+  }, err => { console.error("Chat listener:", err); });
   setTimeout(() => document.getElementById("chatInput").focus(), 200);
 };
 
@@ -1046,30 +1496,26 @@ function renderChatMessages(msgs) {
     </div>`;
     return;
   }
-
   let lastDate = "";
   container.innerHTML = msgs.map(m => {
     const isMine = m.sender === currentUser;
     const ts     = m.createdAt?.toDate ? m.createdAt.toDate() : new Date();
     const dateStr = ts.toLocaleDateString("en-IN", {day:"numeric", month:"short"});
     const timeStr = ts.toLocaleTimeString("en-IN", {hour:"2-digit", minute:"2-digit", hour12:true});
-    const isAdmin = m.sender === ADMIN;
-
+    const isAdm = m.sender === ADMIN;
     let dateDivider = "";
     if (dateStr !== lastDate) {
       lastDate = dateStr;
       dateDivider = `<div class="chat-date-divider"><span>${dateStr}</span></div>`;
     }
-
     const initials = m.sender.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
     const idx      = allStaff.indexOf(m.sender);
     const color    = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
-
     return `${dateDivider}
     <div class="chat-msg ${isMine ? "chat-mine" : "chat-theirs"}">
       ${!isMine ? `<div class="chat-av" style="background:${color}">${initials}</div>` : ""}
       <div class="chat-bubble-wrap">
-        ${!isMine ? `<div class="chat-sender${isAdmin ? " chat-sender-admin" : ""}">${m.sender}${isAdmin ? " 👑" : ""}</div>` : ""}
+        ${!isMine ? `<div class="chat-sender${isAdm ? " chat-sender-admin" : ""}">${m.sender}${isAdm ? " 👑" : ""}</div>` : ""}
         <div class="chat-bubble ${isMine ? "chat-bubble-mine" : "chat-bubble-theirs"}">
           ${escHtml(m.text)}
         </div>
@@ -1077,8 +1523,6 @@ function renderChatMessages(msgs) {
       </div>
     </div>`;
   }).join("");
-
-  // Scroll to bottom
   container.scrollTop = container.scrollHeight;
 }
 
@@ -1090,37 +1534,28 @@ window.closeChat = function() {
   if (activeChatUnsub) { activeChatUnsub(); activeChatUnsub = null; }
   document.getElementById("chatOverlay").style.display = "none";
 };
-
 window.closeChatIfOutside = function(e) {
   if (e.target === document.getElementById("chatOverlay")) closeChat();
 };
-
 window.sendChatMessage = async function() {
   const input  = document.getElementById("chatInput");
   const text   = input.value.trim();
   const taskId = document.getElementById("chatSendBtn").dataset.taskId;
   if (!text || !taskId) return;
-
   const btn = document.getElementById("chatSendBtn");
   btn.disabled = true;
   input.value = "";
-
   try {
     await addDoc(collection(db, "tasks", taskId, "messages"), {
-      text,
-      sender:    currentUser,
-      createdAt: new Date()
+      text, sender: currentUser, createdAt: new Date()
     });
-    // listener will auto-update UI
   } catch(e) {
     showToast("Could not send message", "error");
-    input.value = text; // restore on failure
+    input.value = text;
   }
   btn.disabled = false;
   input.focus();
 };
-
-// Send on Enter (Shift+Enter = newline)
 window.chatKeydown = function(e) {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
