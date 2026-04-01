@@ -41,7 +41,6 @@ let urgentView   = false;
 let messageCounts = {};     // taskId -> count (for badges)
 let activeChatUnsub = null;
 let messageCountUnsubs = [];
-let taskListUnsub = null;   // onSnapshot listener for tasks
 
 // ── DOM ────────────────────────────────────────────
 const loginScreen  = document.getElementById("loginScreen");
@@ -55,12 +54,10 @@ buildLoginScreen();
 loadTasksForLoginBadges();  // fetch tasks so name buttons show workload counts
 
 async function loadTasksForLoginBadges() {
-  // Pre-fetch just to show workload badges on the login screen.
-  // This does NOT affect the post-login data flow.
   try {
     const snap = await getDocs(collection(db,"tasks"));
     allTasks = snap.docs.map(d => ({id:d.id,...d.data()}));
-    buildLoginScreen();  // re-render name buttons with counts
+    buildLoginScreen();  // re-render with counts populated
   } catch(e) { console.warn("Badge preload:", e.message); }
 }
 
@@ -165,39 +162,13 @@ function loginAs(name) {
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
 
-  // Show spinner immediately
-  dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
-  if (isAdmin) { populateAssignSelect(); }
-
-  // ── Immediate fetch: renders tasks as fast as possible ───────────────────
-  getDocs(collection(db, "tasks"))
-    .then(snap => {
-      allTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderCurrentView();
-      loadMessageCounts();
-    })
-    .catch(err => {
-      // Silently ignore — live onSnapshot listener will still load data
-      console.warn("Initial fetch failed:", err.message);
-    });
-
-  // ── Live listener: keeps data fresh after the initial render ─────────────
-  if (taskListUnsub) { taskListUnsub(); taskListUnsub = null; }
-  taskListUnsub = onSnapshot(
-    collection(db, "tasks"),
-    snap => {
-      allTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderCurrentView();
-    },
-    err => { console.error("Live listener error:", err.message); }
-  );
+  loadTasks();
 }
 
 window.logout = function() {
-  if (taskListUnsub)  { taskListUnsub();  taskListUnsub  = null; }
-  if (activeChatUnsub){ activeChatUnsub(); activeChatUnsub = null; }
   messageCountUnsubs.forEach(fn => fn());
   messageCountUnsubs = [];
+  if (activeChatUnsub) { activeChatUnsub(); activeChatUnsub = null; }
   messageCounts = {};
   currentUser = null; isAdmin = false;
   appScreen.style.display   = "none";
@@ -271,19 +242,7 @@ function buildTop3Urgent() {
   </div>`;
 }
 
-// ── renderCurrentView: single entry point for all dashboard renders ──────────
-function renderCurrentView() {
-  if (isAdmin) {
-    populateAssignSelect();
-    if (urgentView) renderUrgentView();
-    else            renderAdminDashboard();
-    updateAdminStats();
-  } else {
-    renderStaffView();
-  }
-}
-
-// ── loadTasks: fetch fresh data and re-render (called after mutations) ───────
+// ── Load tasks ─────────────────────────────────────
 async function loadTasks(keepView = false) {
   try {
     const snap = await getDocs(collection(db,"tasks"));
@@ -291,10 +250,24 @@ async function loadTasks(keepView = false) {
   } catch(e) {
     console.error(e);
     showToast("Cannot reach database","error");
-    return;
+    allTasks = [];
   }
-  loadMessageCounts();
-  renderCurrentView();
+  // Load message counts for chat badges (non-blocking)
+  loadMessageCounts().catch(() => {});
+
+  if(isAdmin) {
+    if(!keepView) {
+      populateAssignSelect();
+      selectDepartment(currentDept);
+    } else {
+      populateAssignSelect();
+      if(urgentView) renderUrgentView();
+      else renderAdminDashboard();
+      updateAdminStats();
+    }
+  } else {
+    renderStaffView();
+  }
 }
 
 // ── ADMIN ──────────────────────────────────────────
@@ -1127,3 +1100,4 @@ window.chatKeydown = function(e) {
     sendChatMessage();
   }
 };
+
