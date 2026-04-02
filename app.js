@@ -1137,7 +1137,12 @@ window.chatKeydown = function(e) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 const CAL_ICS_URL = "https://calendar.google.com/calendar/ical/ddchkar%40gmail.com/private-19359ce714835865f9f0c05ffeaf3339/basic.ics";
-const CAL_PROXY   = "https://corsproxy.io/?";
+const CAL_FETCH_ENDPOINTS = [
+  (url) => url, // try direct first (works if CORS is open)
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://cors.isomorphic-git.org/${url}`,
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`
+];
 
 let calView = false;  // true when calendar tab is active
 
