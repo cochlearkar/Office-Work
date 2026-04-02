@@ -1147,7 +1147,26 @@ window.chatKeydown = function(e) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 const CAL_ICS_URL = "https://calendar.google.com/calendar/ical/ddchkar%40gmail.com/private-19359ce714835865f9f0c05ffeaf3339/basic.ics";
-const CAL_PROXY   = "https://corsproxy.io/?";
+
+// Fetch ICS through a CORS proxy; tries multiple proxies in order
+async function fetchICS() {
+  const proxies = [
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  ];
+  let lastErr;
+  for (const proxyFn of proxies) {
+    try {
+      const res = await fetch(proxyFn(CAL_ICS_URL));
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const text = await res.text();
+      if (!text.includes("BEGIN:VCALENDAR")) throw new Error("Not a valid ICS response");
+      return text;
+    } catch(e) { lastErr = e; }
+  }
+  throw lastErr || new Error("All proxies failed");
+}
 
 let calView = false;  // true when calendar tab is active
 
@@ -1243,9 +1262,8 @@ async function renderCalendarPanel() {
   const panel = document.getElementById("calendarPanel");
   panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
   try {
-    const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const events = parseICS(await res.text());
+    const text = await fetchICS();
+    const events = parseICS(text);
     buildCalendarHTML(panel, events);
   } catch(e) {
     panel.innerHTML = `<div class="cal-state cal-error">
@@ -1385,9 +1403,8 @@ window.showLoginCalendar = async function(e) {
   panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
 
   try {
-    const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const events = parseICS(await res.text());
+    const text = await fetchICS();
+    const events = parseICS(text);
     _buildLoginCalHTML(panel, events);
   } catch(err) {
     panel.innerHTML = `<div class="cal-state cal-error">
