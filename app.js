@@ -47,7 +47,6 @@ let taskListUnsub = null;   // onSnapshot listener for tasks
 const loginScreen  = document.getElementById("loginScreen");
 const appScreen    = document.getElementById("appScreen");
 const dashboard    = document.getElementById("dashboard");
-const homeCalPanel = document.getElementById("homeCalendarPanel");
 const toastEl      = document.getElementById("toast");
 const loginNames   = document.getElementById("loginNames");
 
@@ -165,12 +164,17 @@ function loginAs(name) {
   document.getElementById("adminControls").style.display = isAdmin ? "block" : "none";
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
-  homeCalPanel.style.display = "block";
+
+  // Show bottom nav for everyone
+  const bNav = document.getElementById("bottomNav");
+  if (bNav) bNav.style.display = "flex";
+  // Reset bottom nav state
+  document.getElementById("bnavHome")?.classList.add("active");
+  document.getElementById("bnavCalendar")?.classList.remove("active");
 
   // Show spinner immediately
   dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
   if (isAdmin) { populateAssignSelect(); }
-  renderHomeCalendarPanel();
 
   // ── Immediate fetch: renders tasks as fast as possible ───────────────────
   getDocs(collection(db, "tasks"))
@@ -203,6 +207,10 @@ window.logout = function() {
   messageCountUnsubs = [];
   messageCounts = {};
   currentUser = null; isAdmin = false;
+  calView = false;
+  // Hide bottom nav
+  const bNav = document.getElementById("bottomNav");
+  if (bNav) bNav.style.display = "none";
   appScreen.style.display   = "none";
   loginScreen.style.display = "flex";
 };
@@ -276,6 +284,8 @@ function buildTop3Urgent() {
 
 // ── renderCurrentView: single entry point for all dashboard renders ──────────
 function renderCurrentView() {
+  // Don't clobber the calendar while it's showing
+  if (calView) return;
   if (isAdmin) {
     populateAssignSelect();
     if (urgentView) renderUrgentView();
@@ -1137,32 +1147,64 @@ window.chatKeydown = function(e) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 const CAL_ICS_URL = "https://calendar.google.com/calendar/ical/ddchkar%40gmail.com/private-19359ce714835865f9f0c05ffeaf3339/basic.ics";
-const CAL_FETCH_ENDPOINTS = [
-  (url) => url, // try direct first (works if CORS is open)
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  (url) => `https://cors.isomorphic-git.org/${url}`,
-  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`
-];
+const CAL_PROXY   = "https://corsproxy.io/?";
 
 let calView = false;  // true when calendar tab is active
 
 window.selectCalendarView = function() {
-  // Mark tab active
+  // Mark tab active (admin dept tabs)
   document.querySelectorAll(".dept-tab").forEach(b => b.classList.remove("active"));
   document.querySelector("[data-dept='calendar']")?.classList.add("active");
 
+  _showCalendarUI();
+};
+
+// Shared helper: show calendar UI for both admin and staff
+function _showCalendarUI() {
   // Hide task dashboard, hide add-bar; show calendar panel
   document.getElementById("dashboard").style.display      = "none";
   document.getElementById("addBarWrap") &&
     (document.getElementById("addBarWrap").style.display  = "none");
   document.querySelector(".add-bar-wrap") &&
     (document.querySelector(".add-bar-wrap").style.display = "none");
-  document.getElementById("statsStrip").style.display     = "none";
+  document.getElementById("statsStrip") &&
+    (document.getElementById("statsStrip").style.display  = "none");
+  document.getElementById("staffStrip") &&
+    (document.getElementById("staffStrip").style.display  = "none");
   document.getElementById("calendarPanel").style.display  = "block";
-  homeCalPanel.style.display                               = "none";
+
+  // Update bottom nav
+  document.getElementById("bnavHome")?.classList.remove("active");
+  document.getElementById("bnavCalendar")?.classList.add("active");
 
   calView = true;
   renderCalendarPanel();
+}
+
+// Universal tab switchers for bottom nav
+window.switchToCalendarTab = function() {
+  if (isAdmin) {
+    // Use existing admin tab logic
+    document.querySelectorAll(".dept-tab").forEach(b => b.classList.remove("active"));
+    document.querySelector("[data-dept='calendar']")?.classList.add("active");
+  }
+  _showCalendarUI();
+};
+
+window.switchToHomeTab = function() {
+  _hideCalendar();
+  // Update bottom nav
+  document.getElementById("bnavHome")?.classList.add("active");
+  document.getElementById("bnavCalendar")?.classList.remove("active");
+  // For admin: re-show the right tab
+  if (isAdmin) {
+    document.querySelectorAll(".dept-tab").forEach(b => b.classList.remove("active"));
+    if (urgentView) {
+      document.querySelector("[data-dept='urgent-view']")?.classList.add("active");
+    } else {
+      document.querySelector(`[data-dept='${currentDept}']`)?.classList.add("active");
+    }
+  }
 };
 
 // Hook existing dept-switching functions to hide calendar panel & restore dashboard
@@ -1182,10 +1224,18 @@ function _hideCalendar() {
   calView = false;
   document.getElementById("calendarPanel").style.display  = "none";
   document.getElementById("dashboard").style.display      = "";
-  homeCalPanel.style.display                               = "block";
   document.querySelector(".add-bar-wrap") &&
     (document.querySelector(".add-bar-wrap").style.display = "");
-  document.getElementById("statsStrip").style.display     = "";
+  document.getElementById("statsStrip") &&
+    (document.getElementById("statsStrip").style.display  = "");
+  // Restore staff strip for non-admin
+  if (!isAdmin) {
+    document.getElementById("staffStrip") &&
+      (document.getElementById("staffStrip").style.display = "block");
+  }
+  // Bottom nav state
+  document.getElementById("bnavHome")?.classList.add("active");
+  document.getElementById("bnavCalendar")?.classList.remove("active");
 }
 
 // ── Render ────────────────────────────────────────
@@ -1193,7 +1243,9 @@ async function renderCalendarPanel() {
   const panel = document.getElementById("calendarPanel");
   panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
   try {
-    const events = await fetchCalendarEvents();
+    const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const events = parseICS(await res.text());
     buildCalendarHTML(panel, events);
   } catch(e) {
     panel.innerHTML = `<div class="cal-state cal-error">
@@ -1205,41 +1257,6 @@ async function renderCalendarPanel() {
     </div>`;
   }
 }
-
-async function renderHomeCalendarPanel() {
-  homeCalPanel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
-  try {
-    const events = await fetchCalendarEvents();
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const upcoming = events.filter(e => e.start >= now).slice(0, 5);
-
-    let html = `<div class="home-cal-head">
-      <div class="home-cal-title">📅 Office Calendar</div>
-      <button class="cal-refresh" onclick="renderHomeCalendarPanel()">↻ Refresh</button>
-    </div>`;
-
-    if (!upcoming.length) {
-      html += `<div class="cal-empty" style="padding:24px 16px">🎉 No upcoming events</div>`;
-    } else {
-      upcoming.forEach(ev => { html += _eventCard(ev); });
-    }
-    homeCalPanel.innerHTML = html;
-  } catch (e) {
-    homeCalPanel.innerHTML = `<div class="cal-state cal-error" style="padding:24px 16px">
-      <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:12px">${e.message}</div>
-      <button class="cal-refresh" onclick="renderHomeCalendarPanel()">↻ Retry</button>
-    </div>`;
-  }
-}
-
-async function fetchCalendarEvents() {
-  const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  return parseICS(await res.text());
-}
-window.renderHomeCalendarPanel = renderHomeCalendarPanel;
 
 function buildCalendarHTML(panel, events) {
   const now      = new Date(); now.setHours(0,0,0,0);
@@ -1254,7 +1271,7 @@ function buildCalendarHTML(panel, events) {
   const groups = {};
   upcoming.forEach(e => {
     const k = _dateKey(e.start);
-    if (!groups[k]) groups[k] = { label: _dateLabel(e.start), evs: [] };
+    if (!groups[k]) groups[k] = { label: _dateLabel(e.start), evs: [], date: e.start };
     groups[k].evs.push(e);
   });
 
@@ -1268,7 +1285,8 @@ function buildCalendarHTML(panel, events) {
     <div class="cal-today-banner">
       <span class="cal-today-icon">📌</span>
       <span>${todayCount ? todayCount + " event" + (todayCount > 1 ? "s" : "") + " today" : "Nothing scheduled today"}</span>
-    </div>`;
+    </div>
+    <button class="cal-schedule-btn" onclick="openFabModalForDate(0)">＋ Schedule a Task</button>`;
 
   if (!upcoming.length) {
     html += `<div class="cal-empty">🎉 No upcoming events</div>`;
@@ -1276,8 +1294,12 @@ function buildCalendarHTML(panel, events) {
     Object.entries(groups).forEach(([key, g]) => {
       const isToday = key === todayKey;
       const isTmrw  = key === tmrwKey;
+      const daysAhead = Math.round((g.date - now) / 86400000);
       html += `<div class="cal-day${isToday ? " cal-day-today" : ""}">
-        <div class="cal-day-lbl">${isToday ? "📍 Today — " : isTmrw ? "⏭ Tomorrow — " : ""}${g.label}</div>`;
+        <div class="cal-day-lbl" style="display:flex;align-items:center;justify-content:space-between">
+          <span>${isToday ? "📍 Today — " : isTmrw ? "⏭ Tomorrow — " : ""}${g.label}</span>
+          <button class="cal-add-day-btn" onclick="openFabModalForDate(${daysAhead})" title="Schedule task on this day">＋ Task</button>
+        </div>`;
       g.evs.forEach(ev => { html += _eventCard(ev); });
       html += `</div>`;
     });
@@ -1292,6 +1314,16 @@ function buildCalendarHTML(panel, events) {
 
   panel.innerHTML = html;
 }
+
+// Open FAB modal with a specific due-date pre-selected
+window.openFabModalForDate = function(daysAhead) {
+  openFabModal();
+  // Set the days dropdown to the closest preset
+  const presets = [0, 1, 2, 3, 5, 7];
+  const best = presets.reduce((a, b) => Math.abs(b - daysAhead) < Math.abs(a - daysAhead) ? b : a, 0);
+  const fabDays = document.getElementById("fabDays");
+  if (fabDays) fabDays.value = String(best);
+};
 
 function _eventCard(ev, isPast = false) {
   const allDay = ev.start.getHours() === 0 && ev.start.getMinutes() === 0 &&
@@ -1340,4 +1372,68 @@ function _parseDate(v) {
     return new Date(+v.slice(0,4), +v.slice(4,6)-1, +v.slice(6,8));
   return new Date(+v.slice(0,4), +v.slice(4,6)-1, +v.slice(6,8),
                   +v.slice(9,11), +v.slice(11,13), +v.slice(13,15));
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LOGIN SCREEN CALENDAR PREVIEW (read-only, no task scheduling)
+// ══════════════════════════════════════════════════════════════════════════════
+window.showLoginCalendar = async function(e) {
+  e.preventDefault();
+  const overlay = document.getElementById("loginCalOverlay");
+  const panel   = document.getElementById("loginCalPanel");
+  overlay.style.display = "block";
+  panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
+
+  try {
+    const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const events = parseICS(await res.text());
+    _buildLoginCalHTML(panel, events);
+  } catch(err) {
+    panel.innerHTML = `<div class="cal-state cal-error">
+      <div style="font-size:30px;margin-bottom:8px">⚠️</div>
+      <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
+      <div style="font-size:12px;color:#64748b">${err.message}</div>
+    </div>`;
+  }
+};
+
+function _buildLoginCalHTML(panel, events) {
+  const now      = new Date(); now.setHours(0,0,0,0);
+  const upcoming = events.filter(e => e.start >= now);
+  const todayKey = _dateKey(now);
+  const tmrw     = new Date(now); tmrw.setDate(tmrw.getDate() + 1);
+  const tmrwKey  = _dateKey(tmrw);
+
+  const groups = {};
+  upcoming.forEach(e => {
+    const k = _dateKey(e.start);
+    if (!groups[k]) groups[k] = { label: _dateLabel(e.start), evs: [] };
+    groups[k].evs.push(e);
+  });
+
+  const todayCount = (groups[todayKey]?.evs || []).length;
+
+  let html = `
+    <div class="cal-today-banner" style="margin-bottom:14px">
+      <span class="cal-today-icon">📌</span>
+      <span>${todayCount ? todayCount + " event" + (todayCount > 1 ? "s" : "") + " today" : "Nothing scheduled today"}</span>
+    </div>
+    <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;color:#92400e;margin-bottom:14px;text-align:center">
+      🔒 Sign in to schedule tasks on calendar dates
+    </div>`;
+
+  if (!upcoming.length) {
+    html += `<div class="cal-empty">🎉 No upcoming events</div>`;
+  } else {
+    Object.entries(groups).forEach(([key, g]) => {
+      const isToday = key === todayKey;
+      const isTmrw  = key === tmrwKey;
+      html += `<div class="cal-day${isToday ? " cal-day-today" : ""}">
+        <div class="cal-day-lbl">${isToday ? "📍 Today — " : isTmrw ? "⏭ Tomorrow — " : ""}${g.label}</div>`;
+      g.evs.forEach(ev => { html += _eventCard(ev); });
+      html += `</div>`;
+    });
+  }
+  panel.innerHTML = html;
 }

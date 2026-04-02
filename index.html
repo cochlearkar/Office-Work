@@ -18,6 +18,9 @@
     <div class="login-logo">⚕</div>
     <div class="login-title">Office TaskFlow</div>
     <div class="login-sub">Select your name to continue</div>
+    <div class="login-calendar-link">
+      <a href="#" onclick="window.showLoginCalendar?.(event)">📅 View Office Calendar</a>
+    </div>
     <div class="login-names" id="loginNames">
       <!-- populated by JS -->
     </div>
@@ -107,21 +110,28 @@
     </div>
   </div>
 
-  <!-- ── CALENDAR PANEL (admin only, shown when Calendar tab active) ── -->
-  <div id="calendarPanel" style="display:none;padding:12px 14px 80px;overflow-y:auto;"></div>
-
-  <!-- ── HOME CALENDAR (visible to everyone on home dashboard) ── -->
-  <div id="homeCalendarPanel" class="home-calendar-panel">
-    <div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>
-  </div>
+  <!-- ── CALENDAR PANEL (all users, shown when Calendar tab active) ── -->
+  <div id="calendarPanel" style="display:none;padding:12px 14px 100px;overflow-y:auto;"></div>
 
   <!-- ── DASHBOARD ────────────────────────────────── -->
   <div class="cards-list" id="dashboard">
     <div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>
   </div>
 
-  <!-- ── FAB: Add Task ──────────────────────────── -->
-  <button class="fab-add" onclick="openFabModal()" title="Add task">＋</button>
+  <!-- ── BOTTOM NAV (visible to all) ─────────────── -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="bnav-btn active" id="bnavHome" onclick="switchToHomeTab()">
+      <span class="bnav-icon">🏠</span>
+      <span class="bnav-lbl">Home</span>
+    </button>
+    <button class="bnav-btn bnav-fab" onclick="openFabModal()" title="Add task">
+      <span class="bnav-fab-inner">＋</span>
+    </button>
+    <button class="bnav-btn" id="bnavCalendar" onclick="switchToCalendarTab()">
+      <span class="bnav-icon">📅</span>
+      <span class="bnav-lbl">Calendar</span>
+    </button>
+  </nav>
 
   <!-- ── STAFF ADD MODAL ──────────────────────────── -->
   <div class="modal-overlay" id="staffAddModal" style="display:none" onclick="closeFabIfOutside(event)">
@@ -247,6 +257,19 @@
 
 <div class="toast" id="toast"></div>
 <script type="module" src="app.js"></script>
+
+<!-- ── LOGIN CALENDAR OVERLAY ─────────────────────── -->
+<div id="loginCalOverlay" style="display:none;position:fixed;inset:0;background:#f1f5f9;z-index:9998;overflow-y:auto;">
+  <div style="background:linear-gradient(135deg,#0a5c52,#0d9488);padding:14px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10">
+    <button onclick="document.getElementById('loginCalOverlay').style.display='none'"
+      style="width:34px;height:34px;border:none;border-radius:9px;background:rgba(255,255,255,.2);color:#fff;font-size:18px;cursor:pointer;display:grid;place-items:center;flex-shrink:0">←</button>
+    <div>
+      <div style="color:#fff;font-size:15px;font-weight:800">📅 Office Calendar</div>
+      <div style="color:rgba(255,255,255,.75);font-size:11px;font-weight:600">Sign in to schedule tasks</div>
+    </div>
+  </div>
+  <div id="loginCalPanel" style="padding:12px 14px 40px;"></div>
+</div>
 <!-- ── TASK CHAT OVERLAY ─────────────────────────── -->
 <div class="chat-overlay" id="chatOverlay" style="display:none" onclick="closeChatIfOutside(event)">
   <div class="chat-sheet">
