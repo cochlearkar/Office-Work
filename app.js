@@ -1139,13 +1139,10 @@ window.chatKeydown = function(e) {
 const CAL_ICS_URL = "https://calendar.google.com/calendar/ical/ddchkar%40gmail.com/private-19359ce714835865f9f0c05ffeaf3339/basic.ics";
 const CAL_FETCH_ENDPOINTS = [
   (url) => url, // try direct first (works if CORS is open)
-  (url) => `https://r.jina.ai/http://${url.replace(/^https?:\/\//, "")}`,
   (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   (url) => `https://cors.isomorphic-git.org/${url}`,
   (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`
 ];
-// Backward-compat for older cached code paths that still reference CAL_PROXY.
-const CAL_PROXY = "https://corsproxy.io/?";
 
 let calView = false;  // true when calendar tab is active
 
@@ -1238,37 +1235,11 @@ async function renderHomeCalendarPanel() {
 }
 
 async function fetchCalendarEvents() {
-  const failures = [];
-
-  for (const buildUrl of CAL_FETCH_ENDPOINTS) {
-    const endpoint = _withCacheBust(buildUrl(CAL_ICS_URL));
-    try {
-      const res = await fetch(endpoint);
-      if (!res.ok) {
-        failures.push(`HTTP ${res.status}`);
-        continue;
-      }
-
-      const icsText = await res.text();
-      const events = parseICS(icsText);
-      if (!events.length && !icsText.includes("BEGIN:VEVENT")) {
-        failures.push("Invalid calendar response");
-        continue;
-      }
-      return events;
-    } catch (e) {
-      failures.push(e.message || "Network error");
-    }
-  }
-
-  throw new Error(failures.join(" · "));
+  const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return parseICS(await res.text());
 }
 window.renderHomeCalendarPanel = renderHomeCalendarPanel;
-
-function _withCacheBust(url) {
-  const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}_ts=${Date.now()}`;
-}
 
 function buildCalendarHTML(panel, events) {
   const now      = new Date(); now.setHours(0,0,0,0);
