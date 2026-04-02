@@ -1235,30 +1235,9 @@ async function renderHomeCalendarPanel() {
 }
 
 async function fetchCalendarEvents() {
-  const failures = [];
-
-  for (const buildUrl of CAL_FETCH_ENDPOINTS) {
-    const endpoint = buildUrl(CAL_ICS_URL);
-    try {
-      const res = await fetch(endpoint);
-      if (!res.ok) {
-        failures.push(`HTTP ${res.status}`);
-        continue;
-      }
-
-      const icsText = await res.text();
-      const events = parseICS(icsText);
-      if (!events.length && !icsText.includes("BEGIN:VEVENT")) {
-        failures.push("Invalid calendar response");
-        continue;
-      }
-      return events;
-    } catch (e) {
-      failures.push(e.message || "Network error");
-    }
-  }
-
-  throw new Error(failures.join(" · "));
+  const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return parseICS(await res.text());
 }
 window.renderHomeCalendarPanel = renderHomeCalendarPanel;
 
