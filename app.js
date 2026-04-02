@@ -47,6 +47,7 @@ let taskListUnsub = null;   // onSnapshot listener for tasks
 const loginScreen  = document.getElementById("loginScreen");
 const appScreen    = document.getElementById("appScreen");
 const dashboard    = document.getElementById("dashboard");
+const homeCalPanel = document.getElementById("homeCalendarPanel");
 const toastEl      = document.getElementById("toast");
 const loginNames   = document.getElementById("loginNames");
 
@@ -164,10 +165,12 @@ function loginAs(name) {
   document.getElementById("adminControls").style.display = isAdmin ? "block" : "none";
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
+  homeCalPanel.style.display = "block";
 
   // Show spinner immediately
   dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
   if (isAdmin) { populateAssignSelect(); }
+  renderHomeCalendarPanel();
 
   // ── Immediate fetch: renders tasks as fast as possible ───────────────────
   getDocs(collection(db, "tasks"))
@@ -1151,6 +1154,7 @@ window.selectCalendarView = function() {
     (document.querySelector(".add-bar-wrap").style.display = "none");
   document.getElementById("statsStrip").style.display     = "none";
   document.getElementById("calendarPanel").style.display  = "block";
+  homeCalPanel.style.display                               = "none";
 
   calView = true;
   renderCalendarPanel();
@@ -1173,6 +1177,7 @@ function _hideCalendar() {
   calView = false;
   document.getElementById("calendarPanel").style.display  = "none";
   document.getElementById("dashboard").style.display      = "";
+  homeCalPanel.style.display                               = "block";
   document.querySelector(".add-bar-wrap") &&
     (document.querySelector(".add-bar-wrap").style.display = "");
   document.getElementById("statsStrip").style.display     = "";
@@ -1183,9 +1188,7 @@ async function renderCalendarPanel() {
   const panel = document.getElementById("calendarPanel");
   panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
   try {
-    const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const events = parseICS(await res.text());
+    const events = await fetchCalendarEvents();
     buildCalendarHTML(panel, events);
   } catch(e) {
     panel.innerHTML = `<div class="cal-state cal-error">
@@ -1197,6 +1200,41 @@ async function renderCalendarPanel() {
     </div>`;
   }
 }
+
+async function renderHomeCalendarPanel() {
+  homeCalPanel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
+  try {
+    const events = await fetchCalendarEvents();
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const upcoming = events.filter(e => e.start >= now).slice(0, 5);
+
+    let html = `<div class="home-cal-head">
+      <div class="home-cal-title">📅 Office Calendar</div>
+      <button class="cal-refresh" onclick="renderHomeCalendarPanel()">↻ Refresh</button>
+    </div>`;
+
+    if (!upcoming.length) {
+      html += `<div class="cal-empty" style="padding:24px 16px">🎉 No upcoming events</div>`;
+    } else {
+      upcoming.forEach(ev => { html += _eventCard(ev); });
+    }
+    homeCalPanel.innerHTML = html;
+  } catch (e) {
+    homeCalPanel.innerHTML = `<div class="cal-state cal-error" style="padding:24px 16px">
+      <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:12px">${e.message}</div>
+      <button class="cal-refresh" onclick="renderHomeCalendarPanel()">↻ Retry</button>
+    </div>`;
+  }
+}
+
+async function fetchCalendarEvents() {
+  const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return parseICS(await res.text());
+}
+window.renderHomeCalendarPanel = renderHomeCalendarPanel;
 
 function buildCalendarHTML(panel, events) {
   const now      = new Date(); now.setHours(0,0,0,0);
