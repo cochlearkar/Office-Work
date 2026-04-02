@@ -993,3 +993,82 @@ body{
 .chat-send-btn:hover  { background: #0f766e; }
 .chat-send-btn:active { transform: scale(.92); }
 .chat-send-btn:disabled { background: #cbd5e1; cursor: default; }
+
+/* ══════════════════════════════════════════════
+   CALENDAR PANEL  (only visible on Calendar tab)
+══════════════════════════════════════════════ */
+.cal-state {
+  display:flex; flex-direction:column; align-items:center;
+  justify-content:center; padding:60px 16px;
+  gap:12px; font-size:14px; font-weight:600; color:var(--text3);
+}
+.cal-error { color:#0f172a; }
+
+.cal-topbar {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:10px;
+}
+.cal-topbar-title {
+  font-size:17px; font-weight:900; color:var(--text1);
+}
+.cal-refresh {
+  padding:6px 14px; border:1.5px solid var(--border2); border-radius:8px;
+  background:var(--surface); font-size:12px; font-weight:700;
+  color:var(--text2); cursor:pointer; font-family:inherit;
+}
+.cal-refresh:active { transform:scale(.96); }
+
+.cal-today-banner {
+  display:flex; align-items:center; gap:8px;
+  background:linear-gradient(135deg,#0d9488,#0f766e);
+  color:#fff; border-radius:12px; padding:10px 16px;
+  font-size:13px; font-weight:700; margin-bottom:14px;
+}
+.cal-today-icon { font-size:16px; }
+
+.cal-empty {
+  text-align:center; padding:40px 16px;
+  color:var(--text3); font-size:14px; font-weight:600;
+}
+
+/* Day group */
+.cal-day {
+  border:1.5px solid var(--border2); border-radius:14px;
+  overflow:hidden; background:var(--surface); margin-bottom:12px;
+}
+.cal-day-today { border-color:#0d9488; box-shadow:0 0 0 2px #0d948822; }
+
+.cal-day-lbl {
+  font-size:10px; font-weight:800; color:var(--text2);
+  text-transform:uppercase; letter-spacing:.07em;
+  background:var(--surface2); padding:7px 14px;
+  border-bottom:1px solid var(--border2);
+}
+.cal-day-today .cal-day-lbl { background:#0d9488; color:#fff; }
+
+/* Event card */
+.cal-event {
+  padding:11px 14px; border-bottom:1px solid var(--border2);
+}
+.cal-event:last-child { border-bottom:none; }
+.cal-event-past { opacity:.6; }
+
+.cal-event-time {
+  font-size:10px; font-weight:800; color:#0d9488;
+  text-transform:uppercase; letter-spacing:.04em; margin-bottom:3px;
+}
+.cal-event-past .cal-event-time { color:var(--text3); }
+.cal-event-title { font-size:14px; font-weight:700; color:var(--text1); }
+.cal-event-loc   { font-size:11px; color:var(--text3); margin-top:3px; font-weight:600; }
+
+/* Past events */
+.cal-past {
+  border:1.5px solid var(--border2); border-radius:12px;
+  overflow:hidden; background:var(--surface); margin-top:6px;
+}
+.cal-past summary {
+  padding:11px 14px; font-size:12px; font-weight:800;
+  color:var(--text3); background:var(--surface2); cursor:pointer; list-style:none;
+}
+.cal-past summary::-webkit-details-marker { display:none; }
+.cal-past .cal-event { border-top:1px solid var(--border2); }

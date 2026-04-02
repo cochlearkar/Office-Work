@@ -8,9 +8,9 @@ import {
 const ADMIN = "Dr Basavaraj";
 
 const employeesMap = {
-  child: ["Dr Basavaraj","Dr Vanitha B","Mr Madhukar","Miss Sumayya","Miss Manjula"],
+  child: ["Dr Basavaraj","Dr Vanitha B","Mr Madhukar","Miss Manjula"],
   oral:  ["Dr Basavaraj","Dr Harshitha","Nethra"],
-  ci:    ["Dr Basavaraj","Dr Vanitha B","Mr Madhukar","Miss Sumayya","Miss Manjula"]
+  ci:    ["Dr Basavaraj","Dr Vanitha B","Mr Madhukar","Miss Manjula"]
 };
 const deptNames = { child:"Child Health", oral:"Oral Health", ci:"Cochlear Implant" };
 const avatarColors = ["#0d9488","#7c3aed","#db2777","#d97706","#2563eb","#059669","#dc2626"];
@@ -1127,3 +1127,174 @@ window.chatKeydown = function(e) {
     sendChatMessage();
   }
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CALENDAR TAB — shown only when 📅 Calendar tab is selected
+// Employee tabs (Child / Oral / CI / Urgent) are completely unchanged
+// ══════════════════════════════════════════════════════════════════════════════
+
+const CAL_ICS_URL = "https://calendar.google.com/calendar/ical/ddchkar%40gmail.com/private-19359ce714835865f9f0c05ffeaf3339/basic.ics";
+const CAL_PROXY   = "https://corsproxy.io/?";
+
+let calView = false;  // true when calendar tab is active
+
+window.selectCalendarView = function() {
+  // Mark tab active
+  document.querySelectorAll(".dept-tab").forEach(b => b.classList.remove("active"));
+  document.querySelector("[data-dept='calendar']")?.classList.add("active");
+
+  // Hide task dashboard, hide add-bar; show calendar panel
+  document.getElementById("dashboard").style.display      = "none";
+  document.getElementById("addBarWrap") &&
+    (document.getElementById("addBarWrap").style.display  = "none");
+  document.querySelector(".add-bar-wrap") &&
+    (document.querySelector(".add-bar-wrap").style.display = "none");
+  document.getElementById("statsStrip").style.display     = "none";
+  document.getElementById("calendarPanel").style.display  = "block";
+
+  calView = true;
+  renderCalendarPanel();
+};
+
+// Hook existing dept-switching functions to hide calendar panel & restore dashboard
+const _origSelectDept   = window.selectDepartment;
+const _origSelectUrgent = window.selectUrgentView;
+
+window.selectDepartment = function(d) {
+  _hideCalendar();
+  _origSelectDept(d);
+};
+window.selectUrgentView = function() {
+  _hideCalendar();
+  _origSelectUrgent();
+};
+
+function _hideCalendar() {
+  calView = false;
+  document.getElementById("calendarPanel").style.display  = "none";
+  document.getElementById("dashboard").style.display      = "";
+  document.querySelector(".add-bar-wrap") &&
+    (document.querySelector(".add-bar-wrap").style.display = "");
+  document.getElementById("statsStrip").style.display     = "";
+}
+
+// ── Render ────────────────────────────────────────
+async function renderCalendarPanel() {
+  const panel = document.getElementById("calendarPanel");
+  panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
+  try {
+    const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const events = parseICS(await res.text());
+    buildCalendarHTML(panel, events);
+  } catch(e) {
+    panel.innerHTML = `<div class="cal-state cal-error">
+      <div style="font-size:30px;margin-bottom:8px">⚠️</div>
+      <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:14px">${e.message}</div>
+      <button onclick="renderCalendarPanel()"
+        style="padding:9px 20px;background:#0d9488;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">↻ Retry</button>
+    </div>`;
+  }
+}
+
+function buildCalendarHTML(panel, events) {
+  const now      = new Date(); now.setHours(0,0,0,0);
+  const upcoming = events.filter(e => e.start >= now);
+  const past     = events.filter(e => e.start <  now).reverse().slice(0, 15);
+
+  const todayKey = _dateKey(now);
+  const tmrw     = new Date(now); tmrw.setDate(tmrw.getDate() + 1);
+  const tmrwKey  = _dateKey(tmrw);
+
+  // Group upcoming by date
+  const groups = {};
+  upcoming.forEach(e => {
+    const k = _dateKey(e.start);
+    if (!groups[k]) groups[k] = { label: _dateLabel(e.start), evs: [] };
+    groups[k].evs.push(e);
+  });
+
+  const todayCount = (groups[todayKey]?.evs || []).length;
+
+  let html = `
+    <div class="cal-topbar">
+      <div class="cal-topbar-title">📅 Office Calendar</div>
+      <button class="cal-refresh" onclick="renderCalendarPanel()">↻ Refresh</button>
+    </div>
+    <div class="cal-today-banner">
+      <span class="cal-today-icon">📌</span>
+      <span>${todayCount ? todayCount + " event" + (todayCount > 1 ? "s" : "") + " today" : "Nothing scheduled today"}</span>
+    </div>`;
+
+  if (!upcoming.length) {
+    html += `<div class="cal-empty">🎉 No upcoming events</div>`;
+  } else {
+    Object.entries(groups).forEach(([key, g]) => {
+      const isToday = key === todayKey;
+      const isTmrw  = key === tmrwKey;
+      html += `<div class="cal-day${isToday ? " cal-day-today" : ""}">
+        <div class="cal-day-lbl">${isToday ? "📍 Today — " : isTmrw ? "⏭ Tomorrow — " : ""}${g.label}</div>`;
+      g.evs.forEach(ev => { html += _eventCard(ev); });
+      html += `</div>`;
+    });
+  }
+
+  if (past.length) {
+    html += `<details class="cal-past">
+      <summary>🕘 Recent past events (${past.length})</summary>`;
+    past.forEach(ev => { html += _eventCard(ev, true); });
+    html += `</details>`;
+  }
+
+  panel.innerHTML = html;
+}
+
+function _eventCard(ev, isPast = false) {
+  const allDay = ev.start.getHours() === 0 && ev.start.getMinutes() === 0 &&
+                 (!ev.end || (ev.end.getHours() === 0 && ev.end.getMinutes() === 0));
+  const time   = allDay ? "All day"
+    : ev.start.toLocaleTimeString("en-IN", {hour:"2-digit", minute:"2-digit", hour12:true})
+      + (ev.end ? " – " + ev.end.toLocaleTimeString("en-IN", {hour:"2-digit", minute:"2-digit", hour12:true}) : "");
+  return `<div class="cal-event${isPast ? " cal-event-past" : ""}">
+    <div class="cal-event-time">${time}</div>
+    <div class="cal-event-title">${ev.title || "(No title)"}</div>
+    ${ev.location ? `<div class="cal-event-loc">📍 ${ev.location}</div>` : ""}
+  </div>`;
+}
+
+function _dateKey(d)   { return d.toISOString().slice(0, 10); }
+function _dateLabel(d) {
+  return d.toLocaleDateString("en-IN", {weekday:"long", day:"numeric", month:"long", year:"numeric"});
+}
+
+// ── ICS parser ────────────────────────────────────
+function parseICS(text) {
+  const events = [];
+  const lines  = text.replace(/\r\n[ \t]/g, "").split(/\r?\n/);
+  let ev = null;
+  lines.forEach(line => {
+    if (line === "BEGIN:VEVENT") { ev = {}; return; }
+    if (line === "END:VEVENT")   { if (ev) events.push(ev); ev = null; return; }
+    if (!ev) return;
+    const col = line.indexOf(":");
+    if (col === -1) return;
+    const semi   = line.indexOf(";");
+    const rawKey = (semi !== -1 && semi < col) ? line.slice(0, semi) : line.slice(0, col);
+    const val    = line.slice(col + 1).trim();
+    const key    = rawKey.toUpperCase();
+    if (key === "SUMMARY")  ev.title    = val.replace(/\\n/g,"\n").replace(/\\,/g,",").replace(/\\;/g,";");
+    if (key === "DTSTART")  ev.start    = _parseDate(val);
+    if (key === "DTEND")    ev.end      = _parseDate(val);
+    if (key === "LOCATION") ev.location = val.replace(/\\,/g,",");
+  });
+  return events.filter(e => e.start).sort((a, b) => a.start - b.start);
+}
+
+function _parseDate(v) {
+  v = v.replace("Z", "");
+  if (v.length === 8)
+    return new Date(+v.slice(0,4), +v.slice(4,6)-1, +v.slice(6,8));
+  return new Date(+v.slice(0,4), +v.slice(4,6)-1, +v.slice(6,8),
+                  +v.slice(9,11), +v.slice(11,13), +v.slice(13,15));
+}
