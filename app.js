@@ -47,6 +47,7 @@ let taskListUnsub = null;   // onSnapshot listener for tasks
 const loginScreen  = document.getElementById("loginScreen");
 const appScreen    = document.getElementById("appScreen");
 const dashboard    = document.getElementById("dashboard");
+const homeCalPanel = document.getElementById("homeCalendarPanel");
 const toastEl      = document.getElementById("toast");
 const loginNames   = document.getElementById("loginNames");
 
@@ -164,6 +165,7 @@ function loginAs(name) {
   document.getElementById("adminControls").style.display = isAdmin ? "block" : "none";
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
+  setHomeCalendarVisibility(true);
 
   // Show bottom nav + FAB for everyone
   const bNav = document.getElementById("bottomNav");
@@ -177,6 +179,7 @@ function loginAs(name) {
   // Show spinner immediately
   dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
   if (isAdmin) { populateAssignSelect(); }
+  renderHomeCalendarPanel();
 
   // ── Immediate fetch: renders tasks as fast as possible ───────────────────
   getDocs(collection(db, "tasks"))
