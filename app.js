@@ -1179,18 +1179,12 @@ window.selectCalendarView = function() {
 };
 
 // Shared helper: show calendar UI for both admin and staff
+// Calendar renders INLINE — stats strip, add-bar, and dept tabs all stay visible.
+// Only the task list (dashboard) is swapped out for the calendar panel.
 function _showCalendarUI() {
-  // Hide task dashboard, hide add-bar; show calendar panel
-  document.getElementById("dashboard").style.display      = "none";
-  document.getElementById("addBarWrap") &&
-    (document.getElementById("addBarWrap").style.display  = "none");
-  document.querySelector(".add-bar-wrap") &&
-    (document.querySelector(".add-bar-wrap").style.display = "none");
-  document.getElementById("statsStrip") &&
-    (document.getElementById("statsStrip").style.display  = "none");
-  document.getElementById("staffStrip") &&
-    (document.getElementById("staffStrip").style.display  = "none");
-  document.getElementById("calendarPanel").style.display  = "block";
+  // Swap dashboard out, keep everything else (stats, add-bar, tabs, staff strip)
+  document.getElementById("dashboard").style.display     = "none";
+  document.getElementById("calendarPanel").style.display = "block";
 
   // Update bottom nav
   document.getElementById("bnavHome")?.classList.remove("active");
@@ -1241,24 +1235,15 @@ window.selectUrgentView = function() {
 
 function _hideCalendar() {
   calView = false;
-  document.getElementById("calendarPanel").style.display  = "none";
-  document.getElementById("dashboard").style.display      = "";
-  document.querySelector(".add-bar-wrap") &&
-    (document.querySelector(".add-bar-wrap").style.display = "");
-  document.getElementById("statsStrip") &&
-    (document.getElementById("statsStrip").style.display  = "");
-  // Restore staff strip for non-admin
-  if (!isAdmin) {
-    document.getElementById("staffStrip") &&
-      (document.getElementById("staffStrip").style.display = "block");
-  }
+  document.getElementById("calendarPanel").style.display = "none";
+  document.getElementById("dashboard").style.display     = "";
   // Bottom nav state
   document.getElementById("bnavHome")?.classList.add("active");
   document.getElementById("bnavCalendar")?.classList.remove("active");
 }
 
 // ── Render ────────────────────────────────────────
-async function renderCalendarPanel() {
+window.renderCalendarPanel = async function renderCalendarPanel() {
   const panel = document.getElementById("calendarPanel");
   panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
   try {
