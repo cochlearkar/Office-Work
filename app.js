@@ -47,6 +47,7 @@ let taskListUnsub = null;   // onSnapshot listener for tasks
 const loginScreen  = document.getElementById("loginScreen");
 const appScreen    = document.getElementById("appScreen");
 const dashboard    = document.getElementById("dashboard");
+const homeCalPanel = document.getElementById("homeCalendarPanel");
 const toastEl      = document.getElementById("toast");
 const loginNames   = document.getElementById("loginNames");
 
@@ -164,10 +165,12 @@ function loginAs(name) {
   document.getElementById("adminControls").style.display = isAdmin ? "block" : "none";
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
+  setHomeCalendarVisibility(true);
 
   // Show spinner immediately
   dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
   if (isAdmin) { populateAssignSelect(); }
+  renderHomeCalendarPanel();
 
   // ── Immediate fetch: renders tasks as fast as possible ───────────────────
   getDocs(collection(db, "tasks"))
@@ -1134,7 +1137,16 @@ window.chatKeydown = function(e) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 const CAL_ICS_URL = "https://calendar.google.com/calendar/ical/ddchkar%40gmail.com/private-19359ce714835865f9f0c05ffeaf3339/basic.ics";
-const CAL_PROXY   = "https://corsproxy.io/?";
+// Keep this constant for compatibility and for simple proxy-based fetching.
+const CAL_PROXY = "https://corsproxy.io/?";
+const CAL_FETCH_ENDPOINTS = [
+  (url) => `${CAL_PROXY}${encodeURIComponent(url)}`, // legacy/simple path first
+  (url) => url, // try direct first (works if CORS is open)
+  (url) => `https://r.jina.ai/http://${url.replace(/^https?:\/\//, "")}`,
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://cors.isomorphic-git.org/${url}`,
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`
+];
 
 let calView = false;  // true when calendar tab is active
 
@@ -1151,6 +1163,7 @@ window.selectCalendarView = function() {
     (document.querySelector(".add-bar-wrap").style.display = "none");
   document.getElementById("statsStrip").style.display     = "none";
   document.getElementById("calendarPanel").style.display  = "block";
+  setHomeCalendarVisibility(false);
 
   calView = true;
   renderCalendarPanel();
@@ -1173,6 +1186,7 @@ function _hideCalendar() {
   calView = false;
   document.getElementById("calendarPanel").style.display  = "none";
   document.getElementById("dashboard").style.display      = "";
+  setHomeCalendarVisibility(true);
   document.querySelector(".add-bar-wrap") &&
     (document.querySelector(".add-bar-wrap").style.display = "");
   document.getElementById("statsStrip").style.display     = "";
@@ -1183,9 +1197,7 @@ async function renderCalendarPanel() {
   const panel = document.getElementById("calendarPanel");
   panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
   try {
-    const res = await fetch(CAL_PROXY + encodeURIComponent(CAL_ICS_URL));
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const events = parseICS(await res.text());
+    const events = await fetchCalendarEvents();
     buildCalendarHTML(panel, events);
   } catch(e) {
     panel.innerHTML = `<div class="cal-state cal-error">
@@ -1196,6 +1208,73 @@ async function renderCalendarPanel() {
         style="padding:9px 20px;background:#0d9488;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">↻ Retry</button>
     </div>`;
   }
+}
+
+async function renderHomeCalendarPanel() {
+  if (!homeCalPanel) return;
+  homeCalPanel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
+  try {
+    const events = await fetchCalendarEvents();
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const upcoming = events.filter(e => e.start >= now).slice(0, 5);
+
+    let html = `<div class="home-cal-head">
+      <div class="home-cal-title">📅 Office Calendar</div>
+      <button class="cal-refresh" onclick="renderHomeCalendarPanel()">↻ Refresh</button>
+    </div>`;
+
+    if (!upcoming.length) {
+      html += `<div class="cal-empty" style="padding:24px 16px">🎉 No upcoming events</div>`;
+    } else {
+      upcoming.forEach(ev => { html += _eventCard(ev); });
+    }
+    homeCalPanel.innerHTML = html;
+  } catch (e) {
+    homeCalPanel.innerHTML = `<div class="cal-state cal-error" style="padding:24px 16px">
+      <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:12px">${e.message}</div>
+      <button class="cal-refresh" onclick="renderHomeCalendarPanel()">↻ Retry</button>
+    </div>`;
+  }
+}
+
+async function fetchCalendarEvents() {
+  const failures = [];
+
+  for (const buildUrl of CAL_FETCH_ENDPOINTS) {
+    const endpoint = _withCacheBust(buildUrl(CAL_ICS_URL));
+    try {
+      const res = await fetch(endpoint);
+      if (!res.ok) {
+        failures.push(`HTTP ${res.status}`);
+        continue;
+      }
+
+      const icsText = await res.text();
+      const events = parseICS(icsText);
+      if (!events.length && !icsText.includes("BEGIN:VEVENT")) {
+        failures.push("Invalid calendar response");
+        continue;
+      }
+      return events;
+    } catch (e) {
+      failures.push(e.message || "Network error");
+    }
+  }
+
+  throw new Error(failures.join(" · "));
+}
+window.renderHomeCalendarPanel = renderHomeCalendarPanel;
+
+function _withCacheBust(url) {
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}_ts=${Date.now()}`;
+}
+
+function setHomeCalendarVisibility(show) {
+  if (!homeCalPanel) return;
+  homeCalPanel.style.display = show ? "block" : "none";
 }
 
 function buildCalendarHTML(panel, events) {
