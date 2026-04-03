@@ -167,6 +167,15 @@ function loginAs(name) {
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
   setHomeCalendarVisibility(true);
 
+  // Show bottom nav + FAB for everyone
+  const bNav = document.getElementById("bottomNav");
+  if (bNav) bNav.style.display = "flex";
+  const fab = document.getElementById("fabAddBtn");
+  if (fab) fab.style.display = "grid";
+  // Reset bottom nav state
+  document.getElementById("bnavHome")?.classList.add("active");
+  document.getElementById("bnavCalendar")?.classList.remove("active");
+
   // Show spinner immediately
   dashboard.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
   if (isAdmin) { populateAssignSelect(); }
@@ -203,6 +212,12 @@ window.logout = function() {
   messageCountUnsubs = [];
   messageCounts = {};
   currentUser = null; isAdmin = false;
+  calView = false;
+  // Hide bottom nav and FAB
+  const bNav = document.getElementById("bottomNav");
+  if (bNav) bNav.style.display = "none";
+  const fab = document.getElementById("fabAddBtn");
+  if (fab) fab.style.display = "none";
   appScreen.style.display   = "none";
   loginScreen.style.display = "flex";
 };
@@ -276,6 +291,8 @@ function buildTop3Urgent() {
 
 // ── renderCurrentView: single entry point for all dashboard renders ──────────
 function renderCurrentView() {
+  // Don't clobber the calendar while it's showing
+  if (calView) return;
   if (isAdmin) {
     populateAssignSelect();
     if (urgentView) renderUrgentView();
@@ -481,9 +498,47 @@ function renderUrgentView() {
   });
 }
 
+// ── Staff: today's appointment banner ────────────────
+function buildMyAppointments() {
+  const mySlotted = allTasks.filter(t =>
+    t.assignedTo === currentUser && t.slot && t.status !== 'completed' &&
+    diffDays(t) === 0
+  ).sort((a, b) => a.slot.localeCompare(b.slot));
+
+  if (!mySlotted.length) return '';
+
+  const rows = mySlotted.map(t => {
+    const priColors = {p1:'#ef4444',p2:'#f97316',p3:'#3b82f6',p4:'#94a3b8'};
+    const dot = priColors[t.priority||'p4'];
+    return `<div class="appt-row">
+      <div class="appt-dot" style="background:${dot}"></div>
+      <div class="appt-time">${_fmt12(t.slot)}</div>
+      <div class="appt-task">${t.title}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="appt-banner">
+    <div class="appt-banner-head">
+      <span class="appt-banner-icon">🗓</span>
+      <span class="appt-banner-title">Your Schedule Today</span>
+      <span class="appt-banner-count">${mySlotted.length} task${mySlotted.length>1?'s':''}</span>
+    </div>
+    <div class="appt-rows">${rows}</div>
+  </div>`;
+}
+
+// Also expose _fmt12 for staff banner (defined later in calendar section but needed here)
+function _fmt12(slot) {
+  if (!slot) return '';
+  const [h, m] = slot.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12  = h % 12 || 12;
+  return \`\${h12}:\${String(m).padStart(2,'0')} \${ampm}\`;
+}
+
 // ── STAFF VIEW ─────────────────────────────────────
 function renderStaffView() {
-  dashboard.innerHTML = buildForecastBanner() + buildTop3Urgent();
+  dashboard.innerHTML = buildForecastBanner() + buildTop3Urgent() + buildMyAppointments();
 
   const myTasks = allTasks.filter(t => t.assignedTo === currentUser);
   const pending = myTasks.filter(t => t.status !== "completed");
@@ -1137,36 +1192,80 @@ window.chatKeydown = function(e) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 const CAL_ICS_URL = "https://calendar.google.com/calendar/ical/ddchkar%40gmail.com/private-19359ce714835865f9f0c05ffeaf3339/basic.ics";
-// Keep this constant for compatibility and for simple proxy-based fetching.
-const CAL_PROXY = "https://corsproxy.io/?";
-const CAL_FETCH_ENDPOINTS = [
-  (url) => `${CAL_PROXY}${encodeURIComponent(url)}`, // legacy/simple path first
-  (url) => url, // try direct first (works if CORS is open)
-  (url) => `https://r.jina.ai/http://${url.replace(/^https?:\/\//, "")}`,
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  (url) => `https://cors.isomorphic-git.org/${url}`,
-  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`
-];
+
+// Fetch ICS through a CORS proxy; tries multiple proxies in order
+async function fetchICS() {
+  const proxies = [
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  ];
+  let lastErr;
+  for (const proxyFn of proxies) {
+    try {
+      const res = await fetch(proxyFn(CAL_ICS_URL));
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const text = await res.text();
+      if (!text.includes("BEGIN:VCALENDAR")) throw new Error("Not a valid ICS response");
+      return text;
+    } catch(e) { lastErr = e; }
+  }
+  throw lastErr || new Error("All proxies failed");
+}
 
 let calView = false;  // true when calendar tab is active
 
 window.selectCalendarView = function() {
-  // Mark tab active
+  // Mark tab active (admin dept tabs)
   document.querySelectorAll(".dept-tab").forEach(b => b.classList.remove("active"));
   document.querySelector("[data-dept='calendar']")?.classList.add("active");
 
-  // Hide task dashboard, hide add-bar; show calendar panel
-  document.getElementById("dashboard").style.display      = "none";
-  document.getElementById("addBarWrap") &&
-    (document.getElementById("addBarWrap").style.display  = "none");
-  document.querySelector(".add-bar-wrap") &&
-    (document.querySelector(".add-bar-wrap").style.display = "none");
-  document.getElementById("statsStrip").style.display     = "none";
-  document.getElementById("calendarPanel").style.display  = "block";
-  setHomeCalendarVisibility(false);
+  _showCalendarUI();
+};
+
+// Shared helper: show calendar UI for both admin and staff
+// Calendar renders INLINE — stats strip, add-bar, and dept tabs all stay visible.
+// Only the task list (dashboard) is swapped out for the calendar panel.
+function _showCalendarUI() {
+  // Swap dashboard out, keep everything else (stats, add-bar, tabs, staff strip)
+  document.getElementById("dashboard").style.display     = "none";
+  document.getElementById("calendarPanel").style.display = "block";
+  // Hide FAB — calendar has its own schedule button
+  const fab1 = document.getElementById("fabAddBtn");
+  if (fab1) fab1.style.display = "none";
+
+  // Update bottom nav
+  document.getElementById("bnavHome")?.classList.remove("active");
+  document.getElementById("bnavCalendar")?.classList.add("active");
 
   calView = true;
   renderCalendarPanel();
+}
+
+// Universal tab switchers for bottom nav
+window.switchToCalendarTab = function() {
+  if (isAdmin) {
+    // Use existing admin tab logic
+    document.querySelectorAll(".dept-tab").forEach(b => b.classList.remove("active"));
+    document.querySelector("[data-dept='calendar']")?.classList.add("active");
+  }
+  _showCalendarUI();
+};
+
+window.switchToHomeTab = function() {
+  _hideCalendar();
+  // Update bottom nav
+  document.getElementById("bnavHome")?.classList.add("active");
+  document.getElementById("bnavCalendar")?.classList.remove("active");
+  // For admin: re-show the right tab
+  if (isAdmin) {
+    document.querySelectorAll(".dept-tab").forEach(b => b.classList.remove("active"));
+    if (urgentView) {
+      document.querySelector("[data-dept='urgent-view']")?.classList.add("active");
+    } else {
+      document.querySelector(`[data-dept='${currentDept}']`)?.classList.add("active");
+    }
+  }
 };
 
 // Hook existing dept-switching functions to hide calendar panel & restore dashboard
@@ -1184,100 +1283,238 @@ window.selectUrgentView = function() {
 
 function _hideCalendar() {
   calView = false;
-  document.getElementById("calendarPanel").style.display  = "none";
-  document.getElementById("dashboard").style.display      = "";
-  setHomeCalendarVisibility(true);
-  document.querySelector(".add-bar-wrap") &&
-    (document.querySelector(".add-bar-wrap").style.display = "");
-  document.getElementById("statsStrip").style.display     = "";
+  document.getElementById("calendarPanel").style.display = "none";
+  document.getElementById("dashboard").style.display     = "";
+  // Restore FAB
+  const fab2 = document.getElementById("fabAddBtn");
+  if (fab2) fab2.style.display = "grid";
+  // Bottom nav state
+  document.getElementById("bnavHome")?.classList.add("active");
+  document.getElementById("bnavCalendar")?.classList.remove("active");
 }
 
-// ── Render ────────────────────────────────────────
-async function renderCalendarPanel() {
+// ── Current calendar sub-tab: 'plan' or 'events' ─────
+let calSubTab = 'plan';   // default to Plan Day for admin, Events for staff
+
+window.renderCalendarPanel = async function() {
   const panel = document.getElementById("calendarPanel");
-  panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
-  try {
-    const events = await fetchCalendarEvents();
-    buildCalendarHTML(panel, events);
-  } catch(e) {
-    panel.innerHTML = `<div class="cal-state cal-error">
-      <div style="font-size:30px;margin-bottom:8px">⚠️</div>
-      <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:14px">${e.message}</div>
-      <button onclick="renderCalendarPanel()"
-        style="padding:9px 20px;background:#0d9488;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">↻ Retry</button>
-    </div>`;
-  }
-}
-
-async function renderHomeCalendarPanel() {
-  if (!homeCalPanel) return;
-  homeCalPanel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
-  try {
-    const events = await fetchCalendarEvents();
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const upcoming = events.filter(e => e.start >= now).slice(0, 5);
-
-    let html = `<div class="home-cal-head">
-      <div class="home-cal-title">📅 Office Calendar</div>
-      <button class="cal-refresh" onclick="renderHomeCalendarPanel()">↻ Refresh</button>
-    </div>`;
-
-    if (!upcoming.length) {
-      html += `<div class="cal-empty" style="padding:24px 16px">🎉 No upcoming events</div>`;
-    } else {
-      upcoming.forEach(ev => { html += _eventCard(ev); });
-    }
-    homeCalPanel.innerHTML = html;
-  } catch (e) {
-    homeCalPanel.innerHTML = `<div class="cal-state cal-error" style="padding:24px 16px">
-      <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:12px">${e.message}</div>
-      <button class="cal-refresh" onclick="renderHomeCalendarPanel()">↻ Retry</button>
-    </div>`;
-  }
-}
-
-async function fetchCalendarEvents() {
-  const failures = [];
-
-  for (const buildUrl of CAL_FETCH_ENDPOINTS) {
-    const endpoint = _withCacheBust(buildUrl(CAL_ICS_URL));
+  // For staff, always show events tab; admin defaults to plan
+  if (!isAdmin) calSubTab = 'events';
+  _renderCalTabs(panel);
+  if (calSubTab === 'plan') {
+    renderPlanDay(panel);
+  } else {
+    panel.querySelector('#calEventsPane').innerHTML =
+      `<div class="cal-state"><div class="spinner"></div><p>Loading…</p></div>`;
     try {
-      const res = await fetch(endpoint);
-      if (!res.ok) {
-        failures.push(`HTTP ${res.status}`);
-        continue;
-      }
+      const text = await fetchICS();
+      buildCalendarHTML(panel.querySelector('#calEventsPane'), parseICS(text));
+    } catch(e) {
+      panel.querySelector('#calEventsPane').innerHTML =
+        `<div class="cal-state cal-error">
+          <div style="font-size:30px;margin-bottom:8px">⚠️</div>
+          <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:14px">${e.message}</div>
+          <button onclick="renderCalendarPanel()" style="padding:9px 20px;background:#0d9488;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">↻ Retry</button>
+        </div>`;
+    }
+  }
+};
 
-      const icsText = await res.text();
-      const events = parseICS(icsText);
-      if (!events.length && !icsText.includes("BEGIN:VEVENT")) {
-        failures.push("Invalid calendar response");
-        continue;
-      }
-      return events;
-    } catch (e) {
-      failures.push(e.message || "Network error");
+function _renderCalTabs(panel) {
+  panel.innerHTML = `
+    ${isAdmin ? `
+    <div class="cal-subtabs">
+      <button class="cal-subtab${calSubTab==='plan'?' active':''}" onclick="switchCalSubTab('plan')">📋 Plan Day</button>
+      <button class="cal-subtab${calSubTab==='events'?' active':''}" onclick="switchCalSubTab('events')">📅 Events</button>
+    </div>` : ''}
+    <div id="calPlanPane"   style="display:${calSubTab==='plan'?'block':'none'}"></div>
+    <div id="calEventsPane" style="display:${calSubTab==='events'?'block':'none'}"></div>`;
+}
+
+window.switchCalSubTab = function(tab) {
+  calSubTab = tab;
+  renderCalendarPanel();
+};
+
+// ── PLAN DAY ─────────────────────────────────────────────────────────────────
+// Shows overdue + urgent + today tasks grouped by employee.
+// Admin can assign a time slot to each task (saved to Firestore as task.slot).
+
+const SLOTS = [];
+for (let h = 8; h <= 18; h++) {
+  SLOTS.push(`${String(h).padStart(2,'0')}:00`);
+  if (h < 18) SLOTS.push(`${String(h).padStart(2,'0')}:30`);
+}
+
+async function renderPlanDay(panel) {
+  const pane = panel.querySelector('#calPlanPane');
+  if (!pane) return;
+
+  // If tasks haven't loaded yet, wait and retry
+  if (!allTasks.length) {
+    pane.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
+    try {
+      const snap = await getDocs(collection(db, 'tasks'));
+      allTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch(e) {
+      pane.innerHTML = `<div class="cal-state cal-error"><p>Could not load tasks.<br><button onclick="renderCalendarPanel()" style="margin-top:10px;padding:8px 18px;background:#0d9488;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">Retry</button></p></div>`;
+      return;
     }
   }
 
-  throw new Error(failures.join(" · "));
-}
-window.renderHomeCalendarPanel = renderHomeCalendarPanel;
+  const now = new Date(); now.setHours(0,0,0,0);
 
-function _withCacheBust(url) {
-  const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}_ts=${Date.now()}`;
+  // ALL pending tasks (not completed) — admin needs full picture
+  const pending = allTasks.filter(t => t.status !== 'completed');
+
+  // Priority buckets for summary
+  const totalOverdue = pending.filter(t => diffDays(t) < 0).length;
+  const totalToday   = pending.filter(t => diffDays(t) === 0).length;
+  const totalUrgent  = pending.filter(t => t.priority === 'p1').length;
+  const slotted      = pending.filter(t => t.slot).length;
+
+  // Build per-employee map using allStaff order (guarantees all employees show)
+  const byEmp = {};
+  allStaff.filter(e => e !== ADMIN).forEach(e => { byEmp[e] = []; });
+  pending.forEach(t => {
+    const emp = t.assignedTo;
+    if (emp && byEmp[emp] !== undefined) byEmp[emp].push(t);
+  });
+
+  const slotOpts = SLOTS.map(s => `<option value="${s}">${_fmt12(s)}</option>`).join('');
+
+  let html = `
+    <div class="plan-header">
+      <div class="plan-title">📋 Daily Briefing</div>
+      <div class="plan-date">${now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})}</div>
+    </div>
+    <div class="plan-summary-row">
+      <div class="plan-pill plan-pill-over"><span>${totalOverdue}</span>Overdue</div>
+      <div class="plan-pill plan-pill-today"><span>${totalToday}</span>Today</div>
+      <div class="plan-pill plan-pill-urg"><span>${totalUrgent}</span>Urgent</div>
+      <div class="plan-pill plan-pill-slot"><span>${slotted}</span>Slotted</div>
+    </div>`;
+
+  // ── Timeline: already-slotted tasks ────────────────
+  const slottedTasks = pending.filter(t => t.slot).sort((a,b) => a.slot.localeCompare(b.slot));
+  if (slottedTasks.length) {
+    html += `<div class="plan-section-lbl">🕐 Today's Schedule</div><div class="plan-timeline">`;
+    slottedTasks.forEach(t => {
+      const emp   = t.assignedTo || '—';
+      const idx   = allStaff.indexOf(emp);
+      const color = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
+      const init  = emp.split(' ').filter(w=>w).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      const priColors = {p1:'#ef4444',p2:'#f97316',p3:'#3b82f6',p4:'#94a3b8'};
+      html += `<div class="plan-tl-row">
+        <div class="plan-tl-time">${_fmt12(t.slot)}</div>
+        <div class="plan-tl-bar" style="border-left-color:${priColors[t.priority||'p4']}">
+          <div class="plan-tl-av" style="background:${color}">${init}</div>
+          <div class="plan-tl-info">
+            <div class="plan-tl-task">${t.title}</div>
+            <div class="plan-tl-emp">${emp}</div>
+          </div>
+          <button class="plan-tl-clear" onclick="clearSlot('${t.id}')" title="Remove slot">✕</button>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // ── Per-employee cards ──────────────────────────────
+  html += `<div class="plan-section-lbl">👥 Assign Time Slots</div>`;
+
+  // Show employees that have tasks first, then empty ones collapsed
+  const withTasks    = Object.entries(byEmp).filter(([,t]) => t.length > 0);
+  const withoutTasks = Object.entries(byEmp).filter(([,t]) => t.length === 0);
+
+  const renderEmpCard = ([emp, tasks]) => {
+    const idx   = allStaff.indexOf(emp);
+    const color = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
+    const init  = emp.split(' ').filter(w=>w).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const overdue = tasks.filter(t => diffDays(t) < 0).length;
+    const urgent  = tasks.filter(t => t.priority === 'p1').length;
+    const todayN  = tasks.filter(t => diffDays(t) === 0).length;
+
+    let rows = '';
+    // Sort: overdue → today → urgent → rest
+    const sorted = [...tasks].sort((a,b) => {
+      const scoreA = (diffDays(a)<0?0:diffDays(a)===0?1:2)*10 + ({p1:0,p2:1,p3:2,p4:3}[a.priority]||3);
+      const scoreB = (diffDays(b)<0?0:diffDays(b)===0?1:2)*10 + ({p1:0,p2:1,p3:2,p4:3}[b.priority]||3);
+      return scoreA - scoreB;
+    });
+
+    sorted.forEach(t => {
+      const d = diffDays(t);
+      const dueStr = d < 0 ? `${Math.abs(d)}d overdue` : d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : `In ${d}d`;
+      const dueCls = d < 0 ? 'over' : d === 0 ? 'today' : 'soon';
+      const priDot = {p1:'#ef4444',p2:'#f97316',p3:'#3b82f6',p4:'#94a3b8'}[t.priority||'p4'];
+      const hasSlot = !!t.slot;
+      rows += `<div class="plan-task-row${hasSlot?' plan-task-slotted':''}">
+        <div class="plan-task-pri" style="background:${priDot}"></div>
+        <div class="plan-task-info">
+          <div class="plan-task-title">${t.title}</div>
+          <span class="plan-task-due plan-due-${dueCls}">${dueStr}</span>
+        </div>
+        <div class="plan-task-slot-wrap">
+          <select class="plan-slot-sel" onchange="assignSlot('${t.id}',this.value)">
+            <option value="">${hasSlot ? '✓ '+_fmt12(t.slot) : '+ Time'}</option>
+            ${slotOpts}
+          </select>
+        </div>
+      </div>`;
+    });
+
+    if (!tasks.length) {
+      rows = `<div class="plan-task-row" style="color:#94a3b8;font-size:12px;font-weight:600;justify-content:center">✅ No pending tasks</div>`;
+    }
+
+    return `<div class="plan-emp-card">
+      <div class="plan-emp-head">
+        <div class="plan-emp-av" style="background:${color}">${init}</div>
+        <div class="plan-emp-name">${emp}</div>
+        <div class="plan-emp-tags">
+          ${overdue ? `<span class="plan-tag plan-tag-over">${overdue} overdue</span>` : ''}
+          ${todayN  ? `<span class="plan-tag plan-tag-today">${todayN} today</span>`   : ''}
+          ${urgent  ? `<span class="plan-tag plan-tag-urg">${urgent} urgent</span>`    : ''}
+          ${!tasks.length ? `<span class="plan-tag" style="background:#f0fdf4;color:#059669">All clear</span>` : ''}
+        </div>
+      </div>
+      ${rows}
+    </div>`;
+  };
+
+  withTasks.forEach(e => { html += renderEmpCard(e); });
+
+  if (withoutTasks.length) {
+    html += `<details class="plan-clear-section">
+      <summary>✅ No pending tasks (${withoutTasks.length} staff)</summary>`;
+    withoutTasks.forEach(e => { html += renderEmpCard(e); });
+    html += `</details>`;
+  }
+
+  pane.innerHTML = html;
 }
 
-function setHomeCalendarVisibility(show) {
-  if (!homeCalPanel) return;
-  homeCalPanel.style.display = show ? "block" : "none";
-}
+window.assignSlot = async function(taskId, slot) {
+  if (!slot) return;
+  try {
+    await updateDoc(doc(db, 'tasks', taskId), { slot });
+    showToast(`Slot set: ${_fmt12(slot)} ✓`, 'success');
+    renderPlanDay(document.getElementById('calendarPanel'));
+  } catch(e) { showToast('Could not save slot', 'error'); }
+};
 
-function buildCalendarHTML(panel, events) {
+window.clearSlot = async function(taskId) {
+  try {
+    await updateDoc(doc(db, 'tasks', taskId), { slot: '' });
+    showToast('Slot cleared', '');
+    renderPlanDay(document.getElementById('calendarPanel'));
+  } catch(e) { showToast('Error', 'error'); }
+};
+
+// ── EVENTS TAB ────────────────────────────────────────────────────────────────
+function buildCalendarHTML(pane, events) {
   const now      = new Date(); now.setHours(0,0,0,0);
   const upcoming = events.filter(e => e.start >= now);
   const past     = events.filter(e => e.start <  now).reverse().slice(0, 15);
@@ -1286,24 +1523,19 @@ function buildCalendarHTML(panel, events) {
   const tmrw     = new Date(now); tmrw.setDate(tmrw.getDate() + 1);
   const tmrwKey  = _dateKey(tmrw);
 
-  // Group upcoming by date
   const groups = {};
   upcoming.forEach(e => {
     const k = _dateKey(e.start);
-    if (!groups[k]) groups[k] = { label: _dateLabel(e.start), evs: [] };
+    if (!groups[k]) groups[k] = { label: _dateLabel(e.start), evs: [], date: e.start };
     groups[k].evs.push(e);
   });
 
   const todayCount = (groups[todayKey]?.evs || []).length;
 
   let html = `
-    <div class="cal-topbar">
-      <div class="cal-topbar-title">📅 Office Calendar</div>
-      <button class="cal-refresh" onclick="renderCalendarPanel()">↻ Refresh</button>
-    </div>
-    <div class="cal-today-banner">
+    <div class="cal-today-banner" style="margin-bottom:14px">
       <span class="cal-today-icon">📌</span>
-      <span>${todayCount ? todayCount + " event" + (todayCount > 1 ? "s" : "") + " today" : "Nothing scheduled today"}</span>
+      <span>${todayCount ? todayCount + ' event' + (todayCount>1?'s':'') + ' today' : 'Nothing scheduled today'}</span>
     </div>`;
 
   if (!upcoming.length) {
@@ -1312,22 +1544,34 @@ function buildCalendarHTML(panel, events) {
     Object.entries(groups).forEach(([key, g]) => {
       const isToday = key === todayKey;
       const isTmrw  = key === tmrwKey;
-      html += `<div class="cal-day${isToday ? " cal-day-today" : ""}">
-        <div class="cal-day-lbl">${isToday ? "📍 Today — " : isTmrw ? "⏭ Tomorrow — " : ""}${g.label}</div>`;
+      const daysAhead = Math.round((g.date - now) / 86400000);
+      html += `<div class="cal-day${isToday?' cal-day-today':''}">
+        <div class="cal-day-lbl" style="display:flex;align-items:center;justify-content:space-between">
+          <span>${isToday?'📍 Today — ':isTmrw?'⏭ Tomorrow — ':''}${g.label}</span>
+          <button class="cal-add-day-btn" onclick="openFabModalForDate(${daysAhead})">＋ Task</button>
+        </div>`;
       g.evs.forEach(ev => { html += _eventCard(ev); });
       html += `</div>`;
     });
   }
 
   if (past.length) {
-    html += `<details class="cal-past">
-      <summary>🕘 Recent past events (${past.length})</summary>`;
+    html += `<details class="cal-past"><summary>🕘 Recent past events (${past.length})</summary>`;
     past.forEach(ev => { html += _eventCard(ev, true); });
     html += `</details>`;
   }
 
-  panel.innerHTML = html;
+  pane.innerHTML = html;
 }
+
+// Open FAB modal with a specific due-date pre-selected
+window.openFabModalForDate = function(daysAhead) {
+  openFabModal();
+  const presets = [0, 1, 2, 3, 5, 7];
+  const best = presets.reduce((a, b) => Math.abs(b - daysAhead) < Math.abs(a - daysAhead) ? b : a, 0);
+  const fabDays = document.getElementById("fabDays");
+  if (fabDays) fabDays.value = String(best);
+};
 
 function _eventCard(ev, isPast = false) {
   const allDay = ev.start.getHours() === 0 && ev.start.getMinutes() === 0 &&
@@ -1376,4 +1620,67 @@ function _parseDate(v) {
     return new Date(+v.slice(0,4), +v.slice(4,6)-1, +v.slice(6,8));
   return new Date(+v.slice(0,4), +v.slice(4,6)-1, +v.slice(6,8),
                   +v.slice(9,11), +v.slice(11,13), +v.slice(13,15));
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LOGIN SCREEN CALENDAR PREVIEW (read-only, no task scheduling)
+// ══════════════════════════════════════════════════════════════════════════════
+window.showLoginCalendar = async function(e) {
+  e.preventDefault();
+  const overlay = document.getElementById("loginCalOverlay");
+  const panel   = document.getElementById("loginCalPanel");
+  overlay.style.display = "block";
+  panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
+
+  try {
+    const text = await fetchICS();
+    const events = parseICS(text);
+    _buildLoginCalHTML(panel, events);
+  } catch(err) {
+    panel.innerHTML = `<div class="cal-state cal-error">
+      <div style="font-size:30px;margin-bottom:8px">⚠️</div>
+      <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
+      <div style="font-size:12px;color:#64748b">${err.message}</div>
+    </div>`;
+  }
+};
+
+function _buildLoginCalHTML(panel, events) {
+  const now      = new Date(); now.setHours(0,0,0,0);
+  const upcoming = events.filter(e => e.start >= now);
+  const todayKey = _dateKey(now);
+  const tmrw     = new Date(now); tmrw.setDate(tmrw.getDate() + 1);
+  const tmrwKey  = _dateKey(tmrw);
+
+  const groups = {};
+  upcoming.forEach(e => {
+    const k = _dateKey(e.start);
+    if (!groups[k]) groups[k] = { label: _dateLabel(e.start), evs: [] };
+    groups[k].evs.push(e);
+  });
+
+  const todayCount = (groups[todayKey]?.evs || []).length;
+
+  let html = `
+    <div class="cal-today-banner" style="margin-bottom:14px">
+      <span class="cal-today-icon">📌</span>
+      <span>${todayCount ? todayCount + " event" + (todayCount > 1 ? "s" : "") + " today" : "Nothing scheduled today"}</span>
+    </div>
+    <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;color:#92400e;margin-bottom:14px;text-align:center">
+      🔒 Sign in to schedule tasks on calendar dates
+    </div>`;
+
+  if (!upcoming.length) {
+    html += `<div class="cal-empty">🎉 No upcoming events</div>`;
+  } else {
+    Object.entries(groups).forEach(([key, g]) => {
+      const isToday = key === todayKey;
+      const isTmrw  = key === tmrwKey;
+      html += `<div class="cal-day${isToday ? " cal-day-today" : ""}">
+        <div class="cal-day-lbl">${isToday ? "📍 Today — " : isTmrw ? "⏭ Tomorrow — " : ""}${g.label}</div>`;
+      g.evs.forEach(ev => { html += _eventCard(ev); });
+      html += `</div>`;
+    });
+  }
+  panel.innerHTML = html;
 }
