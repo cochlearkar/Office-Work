@@ -533,7 +533,7 @@ function _fmt12(slot) {
   const [h, m] = slot.split(':').map(Number);
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12  = h % 12 || 12;
-  return \`\${h12}:\${String(m).padStart(2,'0')} \${ampm}\`;
+  return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
 }
 
 // ── STAFF VIEW ─────────────────────────────────────
