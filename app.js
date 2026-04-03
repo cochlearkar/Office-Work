@@ -1348,29 +1348,36 @@ async function renderPlanDay(panel) {
   const pane = panel.querySelector('#calPlanPane');
   if (!pane) return;
 
-  const now   = new Date(); now.setHours(0,0,0,0);
-  const todayStr = _dateKey(now);
+  // If tasks haven't loaded yet, wait and retry
+  if (!allTasks.length) {
+    pane.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading tasks…</p></div>`;
+    try {
+      const snap = await getDocs(collection(db, 'tasks'));
+      allTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch(e) {
+      pane.innerHTML = `<div class="cal-state cal-error"><p>Could not load tasks.<br><button onclick="renderCalendarPanel()" style="margin-top:10px;padding:8px 18px;background:#0d9488;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">Retry</button></p></div>`;
+      return;
+    }
+  }
 
-  // Gather actionable tasks: overdue + today + urgent (not completed)
-  const actionable = allTasks.filter(t => {
-    if (t.status === 'completed') return false;
-    const d = diffDays(t);
-    return d <= 0 || t.priority === 'p1';
-  });
+  const now = new Date(); now.setHours(0,0,0,0);
 
-  // Group by employee
+  // ALL pending tasks (not completed) — admin needs full picture
+  const pending = allTasks.filter(t => t.status !== 'completed');
+
+  // Priority buckets for summary
+  const totalOverdue = pending.filter(t => diffDays(t) < 0).length;
+  const totalToday   = pending.filter(t => diffDays(t) === 0).length;
+  const totalUrgent  = pending.filter(t => t.priority === 'p1').length;
+  const slotted      = pending.filter(t => t.slot).length;
+
+  // Build per-employee map using allStaff order (guarantees all employees show)
   const byEmp = {};
-  actionable.forEach(t => {
-    const emp = t.assignedTo || 'Unassigned';
-    if (!byEmp[emp]) byEmp[emp] = [];
-    byEmp[emp].push(t);
+  allStaff.filter(e => e !== ADMIN).forEach(e => { byEmp[e] = []; });
+  pending.forEach(t => {
+    const emp = t.assignedTo;
+    if (emp && byEmp[emp] !== undefined) byEmp[emp].push(t);
   });
-
-  // Build summary counts
-  const totalOverdue = actionable.filter(t => diffDays(t) < 0).length;
-  const totalToday   = actionable.filter(t => diffDays(t) === 0).length;
-  const totalUrgent  = actionable.filter(t => t.priority === 'p1' && diffDays(t) > 0).length;
-  const slotted      = actionable.filter(t => t.slot).length;
 
   const slotOpts = SLOTS.map(s => `<option value="${s}">${_fmt12(s)}</option>`).join('');
 
@@ -1386,17 +1393,10 @@ async function renderPlanDay(panel) {
       <div class="plan-pill plan-pill-slot"><span>${slotted}</span>Slotted</div>
     </div>`;
 
-  if (!actionable.length) {
-    html += `<div class="cal-empty">✅ No overdue or urgent tasks — all clear!</div>`;
-    pane.innerHTML = html;
-    return;
-  }
-
-  // Timeline of already-slotted tasks
-  const slottedTasks = actionable.filter(t => t.slot).sort((a,b) => a.slot.localeCompare(b.slot));
+  // ── Timeline: already-slotted tasks ────────────────
+  const slottedTasks = pending.filter(t => t.slot).sort((a,b) => a.slot.localeCompare(b.slot));
   if (slottedTasks.length) {
-    html += `<div class="plan-section-lbl">🕐 Today's Schedule</div>
-    <div class="plan-timeline">`;
+    html += `<div class="plan-section-lbl">🕐 Today's Schedule</div><div class="plan-timeline">`;
     slottedTasks.forEach(t => {
       const emp   = t.assignedTo || '—';
       const idx   = allStaff.indexOf(emp);
@@ -1418,37 +1418,36 @@ async function renderPlanDay(panel) {
     html += `</div>`;
   }
 
-  // Employee task lists with slot assignment
+  // ── Per-employee cards ──────────────────────────────
   html += `<div class="plan-section-lbl">👥 Assign Time Slots</div>`;
 
-  Object.entries(byEmp).sort((a,b) => b[1].length - a[1].length).forEach(([emp, tasks]) => {
+  // Show employees that have tasks first, then empty ones collapsed
+  const withTasks    = Object.entries(byEmp).filter(([,t]) => t.length > 0);
+  const withoutTasks = Object.entries(byEmp).filter(([,t]) => t.length === 0);
+
+  const renderEmpCard = ([emp, tasks]) => {
     const idx   = allStaff.indexOf(emp);
     const color = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
     const init  = emp.split(' ').filter(w=>w).map(w=>w[0]).join('').slice(0,2).toUpperCase();
     const overdue = tasks.filter(t => diffDays(t) < 0).length;
     const urgent  = tasks.filter(t => t.priority === 'p1').length;
+    const todayN  = tasks.filter(t => diffDays(t) === 0).length;
 
-    html += `<div class="plan-emp-card">
-      <div class="plan-emp-head">
-        <div class="plan-emp-av" style="background:${color}">${init}</div>
-        <div class="plan-emp-name">${emp}</div>
-        <div class="plan-emp-tags">
-          ${overdue ? `<span class="plan-tag plan-tag-over">${overdue} overdue</span>` : ''}
-          ${urgent  ? `<span class="plan-tag plan-tag-urg">${urgent} urgent</span>`  : ''}
-        </div>
-      </div>`;
+    let rows = '';
+    // Sort: overdue → today → urgent → rest
+    const sorted = [...tasks].sort((a,b) => {
+      const scoreA = (diffDays(a)<0?0:diffDays(a)===0?1:2)*10 + ({p1:0,p2:1,p3:2,p4:3}[a.priority]||3);
+      const scoreB = (diffDays(b)<0?0:diffDays(b)===0?1:2)*10 + ({p1:0,p2:1,p3:2,p4:3}[b.priority]||3);
+      return scoreA - scoreB;
+    });
 
-    tasks.sort((a,b) => {
-      const po = {p1:1,p2:2,p3:3,p4:4};
-      return (po[a.priority]||4) - (po[b.priority]||4) || diffDays(a) - diffDays(b);
-    }).forEach(t => {
+    sorted.forEach(t => {
       const d = diffDays(t);
-      const dueStr = d < 0 ? `${Math.abs(d)}d overdue` : d === 0 ? 'Today' : `${d}d`;
+      const dueStr = d < 0 ? `${Math.abs(d)}d overdue` : d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : `In ${d}d`;
       const dueCls = d < 0 ? 'over' : d === 0 ? 'today' : 'soon';
       const priDot = {p1:'#ef4444',p2:'#f97316',p3:'#3b82f6',p4:'#94a3b8'}[t.priority||'p4'];
       const hasSlot = !!t.slot;
-
-      html += `<div class="plan-task-row${hasSlot?' plan-task-slotted':''}">
+      rows += `<div class="plan-task-row${hasSlot?' plan-task-slotted':''}">
         <div class="plan-task-pri" style="background:${priDot}"></div>
         <div class="plan-task-info">
           <div class="plan-task-title">${t.title}</div>
@@ -1456,15 +1455,40 @@ async function renderPlanDay(panel) {
         </div>
         <div class="plan-task-slot-wrap">
           <select class="plan-slot-sel" onchange="assignSlot('${t.id}',this.value)">
-            <option value="">${hasSlot ? '✓ ' + _fmt12(t.slot) : '+ Time'}</option>
+            <option value="">${hasSlot ? '✓ '+_fmt12(t.slot) : '+ Time'}</option>
             ${slotOpts}
           </select>
         </div>
       </div>`;
     });
 
-    html += `</div>`;
-  });
+    if (!tasks.length) {
+      rows = `<div class="plan-task-row" style="color:#94a3b8;font-size:12px;font-weight:600;justify-content:center">✅ No pending tasks</div>`;
+    }
+
+    return `<div class="plan-emp-card">
+      <div class="plan-emp-head">
+        <div class="plan-emp-av" style="background:${color}">${init}</div>
+        <div class="plan-emp-name">${emp}</div>
+        <div class="plan-emp-tags">
+          ${overdue ? `<span class="plan-tag plan-tag-over">${overdue} overdue</span>` : ''}
+          ${todayN  ? `<span class="plan-tag plan-tag-today">${todayN} today</span>`   : ''}
+          ${urgent  ? `<span class="plan-tag plan-tag-urg">${urgent} urgent</span>`    : ''}
+          ${!tasks.length ? `<span class="plan-tag" style="background:#f0fdf4;color:#059669">All clear</span>` : ''}
+        </div>
+      </div>
+      ${rows}
+    </div>`;
+  };
+
+  withTasks.forEach(e => { html += renderEmpCard(e); });
+
+  if (withoutTasks.length) {
+    html += `<details class="plan-clear-section">
+      <summary>✅ No pending tasks (${withoutTasks.length} staff)</summary>`;
+    withoutTasks.forEach(e => { html += renderEmpCard(e); });
+    html += `</details>`;
+  }
 
   pane.innerHTML = html;
 }

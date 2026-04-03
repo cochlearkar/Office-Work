@@ -1510,3 +1510,23 @@ body{
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Extra plan-day tags */
+.plan-tag-today { background: #fffbeb; color: #d97706; }
+
+.plan-clear-section {
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.plan-clear-section summary {
+  padding: 11px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #059669;
+  background: #f0fdf4;
+  cursor: pointer;
+  list-style: none;
+}
+.plan-clear-section summary::-webkit-details-marker { display: none; }
