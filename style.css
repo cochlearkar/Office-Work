@@ -81,6 +81,24 @@ body{
   margin-bottom: 0;
 }
 
+/* Calendar preview link on login screen */
+.login-calendar-link {
+  margin: 10px 0 0;
+}
+.login-calendar-link a {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,.85);
+  text-decoration: none;
+  padding: 5px 14px;
+  border: 1.5px solid rgba(255,255,255,.3);
+  border-radius: 20px;
+  display: inline-block;
+  backdrop-filter: blur(6px);
+  transition: background .15s;
+}
+.login-calendar-link a:hover { background: rgba(255,255,255,.15); }
+
 /* White sheet slides up below the hero */
 .login-names {
   display: flex;
@@ -305,7 +323,7 @@ body{
 .sp-pending{background:var(--amber-l);} .sp-pending .snum{color:var(--amber);} .sp-pending .slbl{color:#92400e;}
 
 /* ══ CARDS LIST ═════════════════════════════════════ */
-.cards-list{padding:12px 16px 80px;display:flex;flex-direction:column;gap:8px;}
+.cards-list{padding:12px 16px 100px;display:flex;flex-direction:column;gap:8px;}
 .loading-state,.empty-state{text-align:center;padding:48px 16px;color:var(--text3);}
 .spinner{
   width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--teal);
@@ -497,7 +515,102 @@ body{
   font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;color:#fff;cursor:pointer;
 }
 
-/* ══ TOAST ══════════════════════════════════════════ */
+/* ══ BOTTOM NAV (all users) ══════════════════════════ */
+.bottom-nav {
+  position: fixed;
+  bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: #fff;
+  border-top: 1.5px solid var(--border);
+  display: none; /* shown after login via JS */
+  align-items: stretch;
+  z-index: 100;
+  box-shadow: 0 -2px 16px rgba(0,0,0,.08);
+}
+.bnav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 10px 0 max(10px, env(safe-area-inset-bottom));
+  font-family: 'Nunito', sans-serif;
+  position: relative;
+  transition: background .15s;
+}
+.bnav-btn:hover { background: var(--bg); }
+.bnav-btn:active { background: var(--teal-l); }
+
+/* Active top-border indicator */
+.bnav-btn::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 20%; right: 20%;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--teal);
+  opacity: 0;
+  transition: opacity .15s;
+}
+.bnav-btn.active::before { opacity: 1; }
+
+.bnav-icon { font-size: 22px; line-height: 1; }
+.bnav-lbl {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: .01em;
+}
+.bnav-btn.active .bnav-lbl { color: var(--teal); }
+.bnav-btn.active .bnav-icon { filter: drop-shadow(0 0 5px rgba(13,148,136,.35)); }
+
+/* ══ CALENDAR: Schedule Task button ═══════════════════ */
+.cal-schedule-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, var(--teal), var(--teal-d));
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(13,148,136,.3);
+  transition: opacity .15s, transform .1s;
+}
+.cal-schedule-btn:active { opacity: .88; transform: scale(.98); }
+
+/* Per-day ＋ Task button */
+.cal-add-day-btn {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border: 1.5px solid var(--teal);
+  border-radius: 20px;
+  background: var(--teal-l);
+  color: var(--teal);
+  font-family: 'Nunito', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background .12s;
+}
+.cal-add-day-btn:hover { background: var(--teal-m); }
+.cal-day-today .cal-add-day-btn {
+  background: rgba(255,255,255,.25);
+  border-color: rgba(255,255,255,.7);
+  color: #fff;
+}
+.cal-day-today .cal-add-day-btn:hover { background: rgba(255,255,255,.35); }
 .toast{
   position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(12px);
   background:var(--text);color:#fff;padding:10px 20px;border-radius:50px;
@@ -698,24 +811,24 @@ body{
 /* ══ MY-TASKS-HEADER removed — keep these in case needed elsewhere ══ */
 .my-tasks-header { display:none; }
 
-/* ══ FAB — Floating Add Button ══════════════════════════════════════ */
+/* ══ FAB — floating add button above bottom nav ════════════════════════ */
 .fab-add {
   position: fixed;
-  bottom: 28px;
+  bottom: 72px;            /* sits above the 56px bottom nav */
   right: 20px;
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #0d9488, #0f766e);
+  background: linear-gradient(135deg, var(--teal), var(--teal-d));
   color: #fff;
-  font-size: 28px;
+  font-size: 26px;
   line-height: 1;
   border: none;
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(13,148,136,.45);
-  display: grid;
+  display: none;           /* shown after login via JS */
   place-items: center;
-  z-index: 200;
+  z-index: 101;
   transition: transform .15s, box-shadow .15s;
 }
 .fab-add:hover  { transform: scale(1.08); box-shadow: 0 6px 20px rgba(13,148,136,.55); }
@@ -1072,28 +1185,3 @@ body{
 }
 .cal-past summary::-webkit-details-marker { display:none; }
 .cal-past .cal-event { border-top:1px solid var(--border2); }
-
-/* Home dashboard calendar (all users) */
-.home-calendar-panel {
-  margin: 12px 14px 10px;
-  background: #fff;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 1px 6px rgba(0,0,0,.05);
-}
-.home-cal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 11px 12px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
-}
-.home-cal-title {
-  font-size: 14px;
-  font-weight: 900;
-  color: #0f172a;
-}
-.home-calendar-panel .cal-event { padding: 10px 12px; }

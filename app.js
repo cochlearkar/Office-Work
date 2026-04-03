@@ -165,9 +165,11 @@ function loginAs(name) {
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
 
-  // Show bottom nav for everyone
+  // Show bottom nav + FAB for everyone
   const bNav = document.getElementById("bottomNav");
   if (bNav) bNav.style.display = "flex";
+  const fab = document.getElementById("fabAddBtn");
+  if (fab) fab.style.display = "grid";
   // Reset bottom nav state
   document.getElementById("bnavHome")?.classList.add("active");
   document.getElementById("bnavCalendar")?.classList.remove("active");
@@ -208,9 +210,11 @@ window.logout = function() {
   messageCounts = {};
   currentUser = null; isAdmin = false;
   calView = false;
-  // Hide bottom nav
+  // Hide bottom nav and FAB
   const bNav = document.getElementById("bottomNav");
   if (bNav) bNav.style.display = "none";
+  const fab = document.getElementById("fabAddBtn");
+  if (fab) fab.style.display = "none";
   appScreen.style.display   = "none";
   loginScreen.style.display = "flex";
 };
@@ -1185,6 +1189,9 @@ function _showCalendarUI() {
   // Swap dashboard out, keep everything else (stats, add-bar, tabs, staff strip)
   document.getElementById("dashboard").style.display     = "none";
   document.getElementById("calendarPanel").style.display = "block";
+  // Hide FAB — calendar has its own schedule button
+  const fab1 = document.getElementById("fabAddBtn");
+  if (fab1) fab1.style.display = "none";
 
   // Update bottom nav
   document.getElementById("bnavHome")?.classList.remove("active");
@@ -1237,6 +1244,9 @@ function _hideCalendar() {
   calView = false;
   document.getElementById("calendarPanel").style.display = "none";
   document.getElementById("dashboard").style.display     = "";
+  // Restore FAB
+  const fab2 = document.getElementById("fabAddBtn");
+  if (fab2) fab2.style.display = "grid";
   // Bottom nav state
   document.getElementById("bnavHome")?.classList.add("active");
   document.getElementById("bnavCalendar")?.classList.remove("active");

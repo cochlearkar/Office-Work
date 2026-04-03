@@ -118,14 +118,14 @@
     <div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>
   </div>
 
+  <!-- ── FAB: Add Task ──────────────────────────── -->
+  <button class="fab-add" id="fabAddBtn" onclick="openFabModal()" title="Add task">＋</button>
+
   <!-- ── BOTTOM NAV (visible to all) ─────────────── -->
   <nav class="bottom-nav" id="bottomNav">
     <button class="bnav-btn active" id="bnavHome" onclick="switchToHomeTab()">
-      <span class="bnav-icon">🏠</span>
-      <span class="bnav-lbl">Home</span>
-    </button>
-    <button class="bnav-btn bnav-fab" onclick="openFabModal()" title="Add task">
-      <span class="bnav-fab-inner">＋</span>
+      <span class="bnav-icon">✅</span>
+      <span class="bnav-lbl">Tasks</span>
     </button>
     <button class="bnav-btn" id="bnavCalendar" onclick="switchToCalendarTab()">
       <span class="bnav-icon">📅</span>
