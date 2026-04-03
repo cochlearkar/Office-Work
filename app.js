@@ -222,61 +222,6 @@ window.logout = function() {
   loginScreen.style.display = "flex";
 };
 
-// ── Home calendar panel (mini strip on home dashboard) ─────────────────────
-function setHomeCalendarVisibility(visible) {
-  if (homeCalPanel) homeCalPanel.style.display = visible ? "block" : "none";
-}
-
-async function renderHomeCalendarPanel() {
-  if (!homeCalPanel) return;
-  homeCalPanel.innerHTML =
-    `<div class="cal-state" style="padding:14px 0"><div class="spinner" style="width:22px;height:22px;border-width:2px;margin-bottom:6px"></div><p style="font-size:12px">Loading calendar…</p></div>`;
-  try {
-    const text   = await fetchICS();
-    const events = parseICS(text);
-    _buildHomeCalStrip(events);
-  } catch(e) {
-    // Silently hide the panel on failure — don't block the dashboard
-    homeCalPanel.innerHTML =
-      `<div style="padding:10px 14px;font-size:11px;color:#94a3b8;font-weight:600;text-align:center">📅 Calendar unavailable</div>`;
-  }
-}
-
-function _buildHomeCalStrip(events) {
-  if (!homeCalPanel) return;
-  const now      = new Date(); now.setHours(0,0,0,0);
-  const upcoming = events.filter(e => e.start >= now).slice(0, 5);
-  if (!upcoming.length) {
-    homeCalPanel.innerHTML =
-      `<div style="padding:10px 14px;font-size:12px;color:#94a3b8;font-weight:600;text-align:center">📅 No upcoming events</div>`;
-    return;
-  }
-  const todayKey = now.toISOString().slice(0,10);
-  const tmrwKey  = new Date(now.getTime()+86400000).toISOString().slice(0,10);
-  const rows = upcoming.map(ev => {
-    const key  = ev.start.toISOString().slice(0,10);
-    const when = key === todayKey ? "Today"
-               : key === tmrwKey ? "Tomorrow"
-               : ev.start.toLocaleDateString("en-IN",{day:"numeric",month:"short"});
-    const allDay = ev.start.getHours()===0 && ev.start.getMinutes()===0;
-    const time   = allDay ? "All day"
-      : ev.start.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true});
-    return `<div class="hcal-row">
-      <div class="hcal-when${key===todayKey?" hcal-today":""}">${when}</div>
-      <div class="hcal-info">
-        <div class="hcal-title">${ev.title||"(No title)"}</div>
-        <div class="hcal-time">${time}${ev.location?" · "+ev.location:""}</div>
-      </div>
-    </div>`;
-  }).join("");
-  homeCalPanel.innerHTML = `
-    <div class="hcal-header">
-      <span>📅 Upcoming</span>
-      <button class="hcal-more" onclick="switchToCalendarTab()">View all →</button>
-    </div>
-    ${rows}`;
-}
-
 
 // ── Forecast banner + Top 3 Urgent ────────────────
 function buildForecastBanner() {
@@ -630,18 +575,33 @@ function renderStaffView() {
     const colors = {p1:"var(--c-u)", p2:"var(--c-h)", p3:"var(--c-n)", p4:"var(--c-l)"};
     return `<span class="mts-pri-dot" style="background:${colors[t.priority||'p4']}"></span>`;
   };
+
+  // Helper: sort tasks — slotted by time first, then by priority
+  const sortBySlotThenPri = (tasks) => [...tasks].sort((a, b) => {
+    const aS = !!a.slot, bS = !!b.slot;
+    if (aS && bS) return a.slot.localeCompare(b.slot);
+    if (aS) return -1;
+    if (bS) return 1;
+    return ({p1:1,p2:2,p3:3,p4:4}[a.priority||'p4']) - ({p1:1,p2:2,p3:3,p4:4}[b.priority||'p4']);
+  });
+
+  // Helper: time chip shown on each row when slot is assigned
+  const timeChip = t => t.slot
+    ? `<span class="mts-time-chip">🕐 ${_fmt12(t.slot)}</span>`
+    : '';
+
   const sections = [
     { key:"overdue",   icon:"⚠️",  label:"Overdue",          accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
-      tasks: sortByPriority(pending.filter(t => diffDays(t) < 0)),
-      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-overdue-bubble">${Math.abs(diffDays(t))}d</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      tasks: sortBySlotThenPri(pending.filter(t => diffDays(t) < 0)),
+      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}${timeChip(t)?'<br>'+timeChip(t):''}</div><div class="mts-overdue-bubble">${Math.abs(diffDays(t))}d</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"today",     icon:"📋",  label:"Today's Tasks",    accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
-      tasks: sortByPriority(pending.filter(t => diffDays(t) === 0)),
-      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      tasks: sortBySlotThenPri(pending.filter(t => diffDays(t) === 0)),
+      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}${timeChip(t)?'<br>'+timeChip(t):''}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"tomorrow",  icon:"📅",  label:"Tomorrow's Tasks", accent:"#0ea5e9", bg:"#f0f9ff", border:"#bae6fd",
-      tasks: sortByPriority(pending.filter(t => diffDays(t) === 1)),
-      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      tasks: sortBySlotThenPri(pending.filter(t => diffDays(t) === 1)),
+      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}${timeChip(t)?'<br>'+timeChip(t):''}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"upcoming",  icon:"🗓",  label:"Upcoming",         accent:"#059669", bg:"#f0fdf4", border:"#bbf7d0",
-      tasks: sortByPriority(pending.filter(t => diffDays(t) > 1)),
+      tasks: sortBySlotThenPri(pending.filter(t => diffDays(t) > 1)),
       rowFn: t => `<div class="mts-row mts-row-up">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"completed", icon:"✅",  label:"Completed",        accent:"#94a3b8", bg:"#f8fafc", border:"#e2e8f0",
       tasks: done,
@@ -1353,11 +1313,15 @@ let calSubTab = 'plan';   // default to Plan Day for admin, Events for staff
 
 window.renderCalendarPanel = async function() {
   const panel = document.getElementById("calendarPanel");
-  // For staff, always show events tab; admin defaults to plan
-  if (!isAdmin) calSubTab = 'events';
+  // Staff always sees Plan first (admin's schedule for them), then Events
+  if (!isAdmin) calSubTab = 'plan';
   _renderCalTabs(panel);
   if (calSubTab === 'plan') {
-    renderPlanDay(panel);
+    if (isAdmin) {
+      renderPlanDay(panel);
+    } else {
+      renderStaffPlanDay(panel);
+    }
   } else {
     panel.querySelector('#calEventsPane').innerHTML =
       `<div class="cal-state"><div class="spinner"></div><p>Loading…</p></div>`;
@@ -1377,12 +1341,12 @@ window.renderCalendarPanel = async function() {
 };
 
 function _renderCalTabs(panel) {
+  const planLabel = isAdmin ? '📋 Plan Day' : '🗓 Today\'s Plan';
   panel.innerHTML = `
-    ${isAdmin ? `
     <div class="cal-subtabs">
-      <button class="cal-subtab${calSubTab==='plan'?' active':''}" onclick="switchCalSubTab('plan')">📋 Plan Day</button>
+      <button class="cal-subtab${calSubTab==='plan'?' active':''}" onclick="switchCalSubTab('plan')">${planLabel}</button>
       <button class="cal-subtab${calSubTab==='events'?' active':''}" onclick="switchCalSubTab('events')">📅 Events</button>
-    </div>` : ''}
+    </div>
     <div id="calPlanPane"   style="display:${calSubTab==='plan'?'block':'none'}"></div>
     <div id="calEventsPane" style="display:${calSubTab==='events'?'block':'none'}"></div>`;
 }
@@ -1429,9 +1393,9 @@ async function renderPlanDay(panel) {
   const totalUrgent  = pending.filter(t => t.priority === 'p1').length;
   const slotted      = pending.filter(t => t.slot).length;
 
-  // Build per-employee map using allStaff order (guarantees all employees show)
+  // Build per-employee map using allStaff order — includes Admin
   const byEmp = {};
-  allStaff.filter(e => e !== ADMIN).forEach(e => { byEmp[e] = []; });
+  allStaff.forEach(e => { byEmp[e] = []; });
   pending.forEach(t => {
     const emp = t.assignedTo;
     if (emp && byEmp[emp] !== undefined) byEmp[emp].push(t);
@@ -1492,8 +1456,12 @@ async function renderPlanDay(panel) {
     const todayN  = tasks.filter(t => diffDays(t) === 0).length;
 
     let rows = '';
-    // Sort: overdue → today → urgent → rest
-    const sorted = [...tasks].sort((a,b) => {
+    // Sort: slotted by time first, then overdue → today → priority
+    const sorted = [...tasks].sort((a, b) => {
+      const aHasSlot = !!a.slot, bHasSlot = !!b.slot;
+      if (aHasSlot && bHasSlot) return a.slot.localeCompare(b.slot);
+      if (aHasSlot) return -1;
+      if (bHasSlot) return 1;
       const scoreA = (diffDays(a)<0?0:diffDays(a)===0?1:2)*10 + ({p1:0,p2:1,p3:2,p4:3}[a.priority]||3);
       const scoreB = (diffDays(b)<0?0:diffDays(b)===0?1:2)*10 + ({p1:0,p2:1,p3:2,p4:3}[b.priority]||3);
       return scoreA - scoreB;
@@ -1509,7 +1477,10 @@ async function renderPlanDay(panel) {
         <div class="plan-task-pri" style="background:${priDot}"></div>
         <div class="plan-task-info">
           <div class="plan-task-title">${t.title}</div>
-          <span class="plan-task-due plan-due-${dueCls}">${dueStr}</span>
+          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px">
+            <span class="plan-task-due plan-due-${dueCls}">${dueStr}</span>
+            ${hasSlot ? `<span class="plan-slot-chip">🕐 ${_fmt12(t.slot)}</span>` : ''}
+          </div>
         </div>
         <div class="plan-task-slot-wrap">
           <select class="plan-slot-sel" onchange="assignSlot('${t.id}',this.value)">
@@ -1546,6 +1517,81 @@ async function renderPlanDay(panel) {
       <summary>✅ No pending tasks (${withoutTasks.length} staff)</summary>`;
     withoutTasks.forEach(e => { html += renderEmpCard(e); });
     html += `</details>`;
+  }
+
+  pane.innerHTML = html;
+}
+
+// ── Staff: view of admin's planned schedule ───────────────────────────────────
+function renderStaffPlanDay(panel) {
+  const pane = panel.querySelector('#calPlanPane');
+  if (!pane) return;
+
+  const now = new Date(); now.setHours(0,0,0,0);
+  const myTasks = allTasks.filter(t => t.assignedTo === currentUser && t.status !== 'completed');
+
+  const slotted   = myTasks.filter(t => t.slot).sort((a,b) => a.slot.localeCompare(b.slot));
+  const unslotted = myTasks.filter(t => !t.slot).sort((a,b) => {
+    const scoreA = (diffDays(a)<0?0:diffDays(a)===0?1:2)*10 + ({p1:0,p2:1,p3:2,p4:3}[a.priority]||3);
+    const scoreB = (diffDays(b)<0?0:diffDays(b)===0?1:2)*10 + ({p1:0,p2:1,p3:2,p4:3}[b.priority]||3);
+    return scoreA - scoreB;
+  });
+
+  const priColors = {p1:'#ef4444',p2:'#f97316',p3:'#3b82f6',p4:'#94a3b8'};
+  const priLabels = {p1:'Urgent',p2:'High',p3:'Normal',p4:'Low'};
+
+  let html = `
+    <div class="plan-header">
+      <div class="plan-title">\u{1F5D3}\uFE0F Your Plan for Today</div>
+      <div class="plan-date">${now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})}</div>
+    </div>`;
+
+  if (slotted.length) {
+    html += `<div class="plan-section-lbl">\u{1F550} Scheduled by Admin — follow this order</div><div class="plan-timeline">`;
+    slotted.forEach(t => {
+      const d      = diffDays(t);
+      const dueStr = d < 0 ? Math.abs(d)+'d overdue' : d === 0 ? 'Today' : 'In '+d+'d';
+      const dueCls = d < 0 ? '#ef4444' : d === 0 ? '#f59e0b' : '#94a3b8';
+      const priCol = priColors[t.priority||'p4'];
+      html += `<div class="plan-tl-row">
+        <div class="plan-tl-time">${_fmt12(t.slot)}</div>
+        <div class="plan-tl-bar" style="border-left-color:${priCol}">
+          <div class="plan-tl-info" style="flex:1">
+            <div class="plan-tl-task">${t.title}</div>
+            <div style="display:flex;gap:6px;margin-top:3px;align-items:center">
+              <span style="font-size:9px;font-weight:800;background:${priCol}20;color:${priCol};padding:1px 6px;border-radius:8px">${priLabels[t.priority||'p4']}</span>
+              <span style="font-size:10px;color:${dueCls};font-weight:700">${dueStr}</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  } else {
+    html += `<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:12px 14px;font-size:13px;font-weight:700;color:#92400e;margin-bottom:14px">
+      \u23F3 Admin has not scheduled any tasks yet — check back later.
+    </div>`;
+  }
+
+  if (unslotted.length) {
+    html += `<div class="plan-section-lbl">\u{1F4CB} Other pending tasks (no time assigned yet)</div>`;
+    unslotted.forEach(t => {
+      const d      = diffDays(t);
+      const dueStr = d < 0 ? Math.abs(d)+'d overdue' : d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : 'In '+d+'d';
+      const dueCls = d < 0 ? 'over' : d === 0 ? 'today' : 'soon';
+      const priCol = priColors[t.priority||'p4'];
+      html += `<div class="plan-task-row">
+        <div class="plan-task-pri" style="background:${priCol}"></div>
+        <div class="plan-task-info">
+          <div class="plan-task-title">${t.title}</div>
+          <span class="plan-task-due plan-due-${dueCls}">${dueStr}</span>
+        </div>
+      </div>`;
+    });
+  }
+
+  if (!slotted.length && !unslotted.length) {
+    html += `<div class="empty-state"><div class="empty-icon">\u{1F389}</div><h3>All done!</h3><p>No tasks assigned to you right now.</p></div>`;
   }
 
   pane.innerHTML = html;

@@ -1531,35 +1531,41 @@ body{
 }
 .plan-clear-section summary::-webkit-details-marker { display: none; }
 
+/* ══ SLOT TIME CHIP (staff task rows) ══════════════ */
+.mts-time-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #0f766e;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  padding: 2px 7px;
+  border-radius: 8px;
+  margin-top: 2px;
+}
+
+/* ══ PLAN SLOT CHIP (admin employee card) ══════════ */
+.plan-slot-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #0f766e;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+
 /* ══ HOME CALENDAR STRIP ════════════════════════════ */
-.home-calendar-panel{
-  background:var(--surface);border-bottom:1px solid var(--border);
-  padding:0;overflow:hidden;
-}
-.hcal-header{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:9px 16px 5px;font-size:11px;font-weight:800;color:var(--text2);
-  text-transform:uppercase;letter-spacing:.06em;
-}
-.hcal-more{
-  font-size:11px;font-weight:700;color:var(--teal);background:none;
-  border:none;cursor:pointer;font-family:'Nunito',sans-serif;padding:0;
-}
-.hcal-row{
-  display:flex;align-items:center;gap:10px;
-  padding:7px 16px;border-top:1px solid var(--border);
-}
-.hcal-when{
-  font-size:10px;font-weight:800;color:var(--text3);
-  width:58px;flex-shrink:0;text-align:right;
-}
-.hcal-today{ color:var(--teal)!important; }
-.hcal-info{ flex:1;min-width:0; }
-.hcal-title{
-  font-size:13px;font-weight:700;color:var(--text);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.hcal-time{
-  font-size:11px;color:var(--text3);font-weight:600;margin-top:1px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
+.home-calendar-panel{background:var(--surface);border-bottom:1px solid var(--border);padding:0;overflow:hidden;}
+.hcal-header{display:flex;align-items:center;justify-content:space-between;padding:9px 16px 5px;font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;}
+.hcal-more{font-size:11px;font-weight:700;color:var(--teal);background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;padding:0;}
+.hcal-row{display:flex;align-items:center;gap:10px;padding:7px 16px;border-top:1px solid var(--border);}
+.hcal-when{font-size:10px;font-weight:800;color:var(--text3);width:58px;flex-shrink:0;text-align:right;}
+.hcal-today{color:var(--teal)!important;}
+.hcal-info{flex:1;min-width:0;}
+.hcal-title{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hcal-time{font-size:11px;color:var(--text3);font-weight:600;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
