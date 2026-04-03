@@ -222,6 +222,61 @@ window.logout = function() {
   loginScreen.style.display = "flex";
 };
 
+// ── Home calendar panel (mini strip on home dashboard) ─────────────────────
+function setHomeCalendarVisibility(visible) {
+  if (homeCalPanel) homeCalPanel.style.display = visible ? "block" : "none";
+}
+
+async function renderHomeCalendarPanel() {
+  if (!homeCalPanel) return;
+  homeCalPanel.innerHTML =
+    `<div class="cal-state" style="padding:14px 0"><div class="spinner" style="width:22px;height:22px;border-width:2px;margin-bottom:6px"></div><p style="font-size:12px">Loading calendar…</p></div>`;
+  try {
+    const text   = await fetchICS();
+    const events = parseICS(text);
+    _buildHomeCalStrip(events);
+  } catch(e) {
+    // Silently hide the panel on failure — don't block the dashboard
+    homeCalPanel.innerHTML =
+      `<div style="padding:10px 14px;font-size:11px;color:#94a3b8;font-weight:600;text-align:center">📅 Calendar unavailable</div>`;
+  }
+}
+
+function _buildHomeCalStrip(events) {
+  if (!homeCalPanel) return;
+  const now      = new Date(); now.setHours(0,0,0,0);
+  const upcoming = events.filter(e => e.start >= now).slice(0, 5);
+  if (!upcoming.length) {
+    homeCalPanel.innerHTML =
+      `<div style="padding:10px 14px;font-size:12px;color:#94a3b8;font-weight:600;text-align:center">📅 No upcoming events</div>`;
+    return;
+  }
+  const todayKey = now.toISOString().slice(0,10);
+  const tmrwKey  = new Date(now.getTime()+86400000).toISOString().slice(0,10);
+  const rows = upcoming.map(ev => {
+    const key  = ev.start.toISOString().slice(0,10);
+    const when = key === todayKey ? "Today"
+               : key === tmrwKey ? "Tomorrow"
+               : ev.start.toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+    const allDay = ev.start.getHours()===0 && ev.start.getMinutes()===0;
+    const time   = allDay ? "All day"
+      : ev.start.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true});
+    return `<div class="hcal-row">
+      <div class="hcal-when${key===todayKey?" hcal-today":""}">${when}</div>
+      <div class="hcal-info">
+        <div class="hcal-title">${ev.title||"(No title)"}</div>
+        <div class="hcal-time">${time}${ev.location?" · "+ev.location:""}</div>
+      </div>
+    </div>`;
+  }).join("");
+  homeCalPanel.innerHTML = `
+    <div class="hcal-header">
+      <span>📅 Upcoming</span>
+      <button class="hcal-more" onclick="switchToCalendarTab()">View all →</button>
+    </div>
+    ${rows}`;
+}
+
 
 // ── Forecast banner + Top 3 Urgent ────────────────
 function buildForecastBanner() {
