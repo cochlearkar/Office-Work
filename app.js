@@ -495,9 +495,47 @@ function renderUrgentView() {
   });
 }
 
+// ── Staff: today's appointment banner ────────────────
+function buildMyAppointments() {
+  const mySlotted = allTasks.filter(t =>
+    t.assignedTo === currentUser && t.slot && t.status !== 'completed' &&
+    diffDays(t) === 0
+  ).sort((a, b) => a.slot.localeCompare(b.slot));
+
+  if (!mySlotted.length) return '';
+
+  const rows = mySlotted.map(t => {
+    const priColors = {p1:'#ef4444',p2:'#f97316',p3:'#3b82f6',p4:'#94a3b8'};
+    const dot = priColors[t.priority||'p4'];
+    return `<div class="appt-row">
+      <div class="appt-dot" style="background:${dot}"></div>
+      <div class="appt-time">${_fmt12(t.slot)}</div>
+      <div class="appt-task">${t.title}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="appt-banner">
+    <div class="appt-banner-head">
+      <span class="appt-banner-icon">🗓</span>
+      <span class="appt-banner-title">Your Schedule Today</span>
+      <span class="appt-banner-count">${mySlotted.length} task${mySlotted.length>1?'s':''}</span>
+    </div>
+    <div class="appt-rows">${rows}</div>
+  </div>`;
+}
+
+// Also expose _fmt12 for staff banner (defined later in calendar section but needed here)
+function _fmt12(slot) {
+  if (!slot) return '';
+  const [h, m] = slot.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12  = h % 12 || 12;
+  return \`\${h12}:\${String(m).padStart(2,'0')} \${ampm}\`;
+}
+
 // ── STAFF VIEW ─────────────────────────────────────
 function renderStaffView() {
-  dashboard.innerHTML = buildForecastBanner() + buildTop3Urgent();
+  dashboard.innerHTML = buildForecastBanner() + buildTop3Urgent() + buildMyAppointments();
 
   const myTasks = allTasks.filter(t => t.assignedTo === currentUser);
   const pending = myTasks.filter(t => t.status !== "completed");
@@ -1252,26 +1290,204 @@ function _hideCalendar() {
   document.getElementById("bnavCalendar")?.classList.remove("active");
 }
 
-// ── Render ────────────────────────────────────────
-window.renderCalendarPanel = async function renderCalendarPanel() {
+// ── Current calendar sub-tab: 'plan' or 'events' ─────
+let calSubTab = 'plan';   // default to Plan Day for admin, Events for staff
+
+window.renderCalendarPanel = async function() {
   const panel = document.getElementById("calendarPanel");
-  panel.innerHTML = `<div class="cal-state"><div class="spinner"></div><p>Loading calendar…</p></div>`;
-  try {
-    const text = await fetchICS();
-    const events = parseICS(text);
-    buildCalendarHTML(panel, events);
-  } catch(e) {
-    panel.innerHTML = `<div class="cal-state cal-error">
-      <div style="font-size:30px;margin-bottom:8px">⚠️</div>
-      <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:14px">${e.message}</div>
-      <button onclick="renderCalendarPanel()"
-        style="padding:9px 20px;background:#0d9488;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">↻ Retry</button>
-    </div>`;
+  // For staff, always show events tab; admin defaults to plan
+  if (!isAdmin) calSubTab = 'events';
+  _renderCalTabs(panel);
+  if (calSubTab === 'plan') {
+    renderPlanDay(panel);
+  } else {
+    panel.querySelector('#calEventsPane').innerHTML =
+      `<div class="cal-state"><div class="spinner"></div><p>Loading…</p></div>`;
+    try {
+      const text = await fetchICS();
+      buildCalendarHTML(panel.querySelector('#calEventsPane'), parseICS(text));
+    } catch(e) {
+      panel.querySelector('#calEventsPane').innerHTML =
+        `<div class="cal-state cal-error">
+          <div style="font-size:30px;margin-bottom:8px">⚠️</div>
+          <div style="font-weight:800;margin-bottom:4px">Could not load calendar</div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:14px">${e.message}</div>
+          <button onclick="renderCalendarPanel()" style="padding:9px 20px;background:#0d9488;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">↻ Retry</button>
+        </div>`;
+    }
   }
+};
+
+function _renderCalTabs(panel) {
+  panel.innerHTML = `
+    ${isAdmin ? `
+    <div class="cal-subtabs">
+      <button class="cal-subtab${calSubTab==='plan'?' active':''}" onclick="switchCalSubTab('plan')">📋 Plan Day</button>
+      <button class="cal-subtab${calSubTab==='events'?' active':''}" onclick="switchCalSubTab('events')">📅 Events</button>
+    </div>` : ''}
+    <div id="calPlanPane"   style="display:${calSubTab==='plan'?'block':'none'}"></div>
+    <div id="calEventsPane" style="display:${calSubTab==='events'?'block':'none'}"></div>`;
 }
 
-function buildCalendarHTML(panel, events) {
+window.switchCalSubTab = function(tab) {
+  calSubTab = tab;
+  renderCalendarPanel();
+};
+
+// ── PLAN DAY ─────────────────────────────────────────────────────────────────
+// Shows overdue + urgent + today tasks grouped by employee.
+// Admin can assign a time slot to each task (saved to Firestore as task.slot).
+
+const SLOTS = [];
+for (let h = 8; h <= 18; h++) {
+  SLOTS.push(`${String(h).padStart(2,'0')}:00`);
+  if (h < 18) SLOTS.push(`${String(h).padStart(2,'0')}:30`);
+}
+
+async function renderPlanDay(panel) {
+  const pane = panel.querySelector('#calPlanPane');
+  if (!pane) return;
+
+  const now   = new Date(); now.setHours(0,0,0,0);
+  const todayStr = _dateKey(now);
+
+  // Gather actionable tasks: overdue + today + urgent (not completed)
+  const actionable = allTasks.filter(t => {
+    if (t.status === 'completed') return false;
+    const d = diffDays(t);
+    return d <= 0 || t.priority === 'p1';
+  });
+
+  // Group by employee
+  const byEmp = {};
+  actionable.forEach(t => {
+    const emp = t.assignedTo || 'Unassigned';
+    if (!byEmp[emp]) byEmp[emp] = [];
+    byEmp[emp].push(t);
+  });
+
+  // Build summary counts
+  const totalOverdue = actionable.filter(t => diffDays(t) < 0).length;
+  const totalToday   = actionable.filter(t => diffDays(t) === 0).length;
+  const totalUrgent  = actionable.filter(t => t.priority === 'p1' && diffDays(t) > 0).length;
+  const slotted      = actionable.filter(t => t.slot).length;
+
+  const slotOpts = SLOTS.map(s => `<option value="${s}">${_fmt12(s)}</option>`).join('');
+
+  let html = `
+    <div class="plan-header">
+      <div class="plan-title">📋 Daily Briefing</div>
+      <div class="plan-date">${now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})}</div>
+    </div>
+    <div class="plan-summary-row">
+      <div class="plan-pill plan-pill-over"><span>${totalOverdue}</span>Overdue</div>
+      <div class="plan-pill plan-pill-today"><span>${totalToday}</span>Today</div>
+      <div class="plan-pill plan-pill-urg"><span>${totalUrgent}</span>Urgent</div>
+      <div class="plan-pill plan-pill-slot"><span>${slotted}</span>Slotted</div>
+    </div>`;
+
+  if (!actionable.length) {
+    html += `<div class="cal-empty">✅ No overdue or urgent tasks — all clear!</div>`;
+    pane.innerHTML = html;
+    return;
+  }
+
+  // Timeline of already-slotted tasks
+  const slottedTasks = actionable.filter(t => t.slot).sort((a,b) => a.slot.localeCompare(b.slot));
+  if (slottedTasks.length) {
+    html += `<div class="plan-section-lbl">🕐 Today's Schedule</div>
+    <div class="plan-timeline">`;
+    slottedTasks.forEach(t => {
+      const emp   = t.assignedTo || '—';
+      const idx   = allStaff.indexOf(emp);
+      const color = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
+      const init  = emp.split(' ').filter(w=>w).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      const priColors = {p1:'#ef4444',p2:'#f97316',p3:'#3b82f6',p4:'#94a3b8'};
+      html += `<div class="plan-tl-row">
+        <div class="plan-tl-time">${_fmt12(t.slot)}</div>
+        <div class="plan-tl-bar" style="border-left-color:${priColors[t.priority||'p4']}">
+          <div class="plan-tl-av" style="background:${color}">${init}</div>
+          <div class="plan-tl-info">
+            <div class="plan-tl-task">${t.title}</div>
+            <div class="plan-tl-emp">${emp}</div>
+          </div>
+          <button class="plan-tl-clear" onclick="clearSlot('${t.id}')" title="Remove slot">✕</button>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Employee task lists with slot assignment
+  html += `<div class="plan-section-lbl">👥 Assign Time Slots</div>`;
+
+  Object.entries(byEmp).sort((a,b) => b[1].length - a[1].length).forEach(([emp, tasks]) => {
+    const idx   = allStaff.indexOf(emp);
+    const color = avatarColors[idx >= 0 ? idx % avatarColors.length : 0];
+    const init  = emp.split(' ').filter(w=>w).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const overdue = tasks.filter(t => diffDays(t) < 0).length;
+    const urgent  = tasks.filter(t => t.priority === 'p1').length;
+
+    html += `<div class="plan-emp-card">
+      <div class="plan-emp-head">
+        <div class="plan-emp-av" style="background:${color}">${init}</div>
+        <div class="plan-emp-name">${emp}</div>
+        <div class="plan-emp-tags">
+          ${overdue ? `<span class="plan-tag plan-tag-over">${overdue} overdue</span>` : ''}
+          ${urgent  ? `<span class="plan-tag plan-tag-urg">${urgent} urgent</span>`  : ''}
+        </div>
+      </div>`;
+
+    tasks.sort((a,b) => {
+      const po = {p1:1,p2:2,p3:3,p4:4};
+      return (po[a.priority]||4) - (po[b.priority]||4) || diffDays(a) - diffDays(b);
+    }).forEach(t => {
+      const d = diffDays(t);
+      const dueStr = d < 0 ? `${Math.abs(d)}d overdue` : d === 0 ? 'Today' : `${d}d`;
+      const dueCls = d < 0 ? 'over' : d === 0 ? 'today' : 'soon';
+      const priDot = {p1:'#ef4444',p2:'#f97316',p3:'#3b82f6',p4:'#94a3b8'}[t.priority||'p4'];
+      const hasSlot = !!t.slot;
+
+      html += `<div class="plan-task-row${hasSlot?' plan-task-slotted':''}">
+        <div class="plan-task-pri" style="background:${priDot}"></div>
+        <div class="plan-task-info">
+          <div class="plan-task-title">${t.title}</div>
+          <span class="plan-task-due plan-due-${dueCls}">${dueStr}</span>
+        </div>
+        <div class="plan-task-slot-wrap">
+          <select class="plan-slot-sel" onchange="assignSlot('${t.id}',this.value)">
+            <option value="">${hasSlot ? '✓ ' + _fmt12(t.slot) : '+ Time'}</option>
+            ${slotOpts}
+          </select>
+        </div>
+      </div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  pane.innerHTML = html;
+}
+
+window.assignSlot = async function(taskId, slot) {
+  if (!slot) return;
+  try {
+    await updateDoc(doc(db, 'tasks', taskId), { slot });
+    showToast(`Slot set: ${_fmt12(slot)} ✓`, 'success');
+    renderPlanDay(document.getElementById('calendarPanel'));
+  } catch(e) { showToast('Could not save slot', 'error'); }
+};
+
+window.clearSlot = async function(taskId) {
+  try {
+    await updateDoc(doc(db, 'tasks', taskId), { slot: '' });
+    showToast('Slot cleared', '');
+    renderPlanDay(document.getElementById('calendarPanel'));
+  } catch(e) { showToast('Error', 'error'); }
+};
+
+// ── EVENTS TAB ────────────────────────────────────────────────────────────────
+function buildCalendarHTML(pane, events) {
   const now      = new Date(); now.setHours(0,0,0,0);
   const upcoming = events.filter(e => e.start >= now);
   const past     = events.filter(e => e.start <  now).reverse().slice(0, 15);
@@ -1280,7 +1496,6 @@ function buildCalendarHTML(panel, events) {
   const tmrw     = new Date(now); tmrw.setDate(tmrw.getDate() + 1);
   const tmrwKey  = _dateKey(tmrw);
 
-  // Group upcoming by date
   const groups = {};
   upcoming.forEach(e => {
     const k = _dateKey(e.start);
@@ -1291,15 +1506,10 @@ function buildCalendarHTML(panel, events) {
   const todayCount = (groups[todayKey]?.evs || []).length;
 
   let html = `
-    <div class="cal-topbar">
-      <div class="cal-topbar-title">📅 Office Calendar</div>
-      <button class="cal-refresh" onclick="renderCalendarPanel()">↻ Refresh</button>
-    </div>
-    <div class="cal-today-banner">
+    <div class="cal-today-banner" style="margin-bottom:14px">
       <span class="cal-today-icon">📌</span>
-      <span>${todayCount ? todayCount + " event" + (todayCount > 1 ? "s" : "") + " today" : "Nothing scheduled today"}</span>
-    </div>
-    <button class="cal-schedule-btn" onclick="openFabModalForDate(0)">＋ Schedule a Task</button>`;
+      <span>${todayCount ? todayCount + ' event' + (todayCount>1?'s':'') + ' today' : 'Nothing scheduled today'}</span>
+    </div>`;
 
   if (!upcoming.length) {
     html += `<div class="cal-empty">🎉 No upcoming events</div>`;
@@ -1308,10 +1518,10 @@ function buildCalendarHTML(panel, events) {
       const isToday = key === todayKey;
       const isTmrw  = key === tmrwKey;
       const daysAhead = Math.round((g.date - now) / 86400000);
-      html += `<div class="cal-day${isToday ? " cal-day-today" : ""}">
+      html += `<div class="cal-day${isToday?' cal-day-today':''}">
         <div class="cal-day-lbl" style="display:flex;align-items:center;justify-content:space-between">
-          <span>${isToday ? "📍 Today — " : isTmrw ? "⏭ Tomorrow — " : ""}${g.label}</span>
-          <button class="cal-add-day-btn" onclick="openFabModalForDate(${daysAhead})" title="Schedule task on this day">＋ Task</button>
+          <span>${isToday?'📍 Today — ':isTmrw?'⏭ Tomorrow — ':''}${g.label}</span>
+          <button class="cal-add-day-btn" onclick="openFabModalForDate(${daysAhead})">＋ Task</button>
         </div>`;
       g.evs.forEach(ev => { html += _eventCard(ev); });
       html += `</div>`;
@@ -1319,19 +1529,17 @@ function buildCalendarHTML(panel, events) {
   }
 
   if (past.length) {
-    html += `<details class="cal-past">
-      <summary>🕘 Recent past events (${past.length})</summary>`;
+    html += `<details class="cal-past"><summary>🕘 Recent past events (${past.length})</summary>`;
     past.forEach(ev => { html += _eventCard(ev, true); });
     html += `</details>`;
   }
 
-  panel.innerHTML = html;
+  pane.innerHTML = html;
 }
 
 // Open FAB modal with a specific due-date pre-selected
 window.openFabModalForDate = function(daysAhead) {
   openFabModal();
-  // Set the days dropdown to the closest preset
   const presets = [0, 1, 2, 3, 5, 7];
   const best = presets.reduce((a, b) => Math.abs(b - daysAhead) < Math.abs(a - daysAhead) ? b : a, 0);
   const fabDays = document.getElementById("fabDays");

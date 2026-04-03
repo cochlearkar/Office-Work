@@ -1185,3 +1185,328 @@ body{
 }
 .cal-past summary::-webkit-details-marker { display:none; }
 .cal-past .cal-event { border-top:1px solid var(--border2); }
+
+/* ══════════════════════════════════════════════════════════
+   CALENDAR SUB-TABS  (Plan Day / Events)
+══════════════════════════════════════════════════════════ */
+.cal-subtabs {
+  display: flex;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 16px;
+  background: var(--surface);
+  position: sticky;
+  top: 56px;   /* sits just below the app header */
+  z-index: 10;
+}
+.cal-subtab {
+  flex: 1;
+  padding: 11px 8px;
+  border: none;
+  background: none;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text3);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.cal-subtab.active {
+  color: var(--teal);
+  border-bottom-color: var(--teal);
+}
+
+/* ══════════════════════════════════════════════════════════
+   PLAN DAY  — Daily Briefing Planner
+══════════════════════════════════════════════════════════ */
+.plan-header {
+  margin-bottom: 12px;
+}
+.plan-title {
+  font-size: 17px;
+  font-weight: 900;
+  color: var(--text);
+}
+.plan-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+/* Summary pills row */
+.plan-summary-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.plan-pill {
+  flex: 1;
+  border-radius: 10px;
+  padding: 8px 6px 6px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.plan-pill span {
+  display: block;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.1;
+  margin-bottom: 2px;
+}
+.plan-pill-over  { background: #fef2f2; color: #b91c1c; }
+.plan-pill-over span { color: #dc2626; }
+.plan-pill-today { background: #fffbeb; color: #92400e; }
+.plan-pill-today span { color: #d97706; }
+.plan-pill-urg   { background: #fff7ed; color: #9a3412; }
+.plan-pill-urg span { color: #ea580c; }
+.plan-pill-slot  { background: #f0fdfa; color: #0f766e; }
+.plan-pill-slot span { color: #0d9488; }
+
+/* Section labels */
+.plan-section-lbl {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin: 16px 0 8px;
+}
+
+/* ── Timeline (slotted tasks) ─────────────────────── */
+.plan-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.plan-tl-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.plan-tl-time {
+  width: 58px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--teal);
+  padding-top: 10px;
+  text-align: right;
+}
+.plan-tl-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border-radius: 10px;
+  border-left: 4px solid var(--teal);
+  padding: 9px 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.plan-tl-av {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.plan-tl-info { flex: 1; min-width: 0; }
+.plan-tl-task {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plan-tl-emp {
+  font-size: 11px;
+  color: var(--text3);
+  font-weight: 600;
+  margin-top: 1px;
+}
+.plan-tl-clear {
+  width: 24px; height: 24px;
+  border: none;
+  background: var(--bg);
+  border-radius: 6px;
+  color: var(--text3);
+  font-size: 11px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.plan-tl-clear:hover { background: #fef2f2; color: #dc2626; }
+
+/* ── Employee task cards ──────────────────────────── */
+.plan-emp-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+}
+.plan-emp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.plan-emp-av {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.plan-emp-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  flex: 1;
+}
+.plan-emp-tags {
+  display: flex;
+  gap: 4px;
+}
+.plan-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+}
+.plan-tag-over { background: #fef2f2; color: #dc2626; }
+.plan-tag-urg  { background: #fff7ed; color: #ea580c; }
+
+/* ── Task row inside employee card ───────────────── */
+.plan-task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background .12s;
+}
+.plan-task-row:last-child { border-bottom: none; }
+.plan-task-row.plan-task-slotted { background: #f0fdfa; }
+.plan-task-pri {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.plan-task-info { flex: 1; min-width: 0; }
+.plan-task-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plan-task-due {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  display: inline-block;
+  margin-top: 3px;
+}
+.plan-due-over  { background: #fef2f2; color: #dc2626; }
+.plan-due-today { background: #fffbeb; color: #d97706; }
+.plan-due-soon  { background: #f0fdf4; color: #059669; }
+
+/* Slot dropdown */
+.plan-task-slot-wrap { flex-shrink: 0; }
+.plan-slot-sel {
+  padding: 5px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--teal);
+  background: var(--teal-l);
+  cursor: pointer;
+  outline: none;
+  max-width: 90px;
+}
+.plan-task-slotted .plan-slot-sel {
+  border-color: var(--teal);
+  background: #ccfbf1;
+}
+
+/* ══════════════════════════════════════════════════════════
+   STAFF — Today's Appointment Banner
+══════════════════════════════════════════════════════════ */
+.appt-banner {
+  background: linear-gradient(135deg, #0a5c52, #0d9488);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 4px;
+}
+.appt-banner-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.appt-banner-icon  { font-size: 16px; }
+.appt-banner-title { font-size: 13px; font-weight: 800; color: #fff; flex: 1; }
+.appt-banner-count {
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255,255,255,.2);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.appt-rows { display: flex; flex-direction: column; gap: 6px; }
+.appt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,.12);
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+.appt-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.4);
+}
+.appt-time {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+  min-width: 60px;
+}
+.appt-task {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,.9);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
