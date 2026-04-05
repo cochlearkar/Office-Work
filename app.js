@@ -1770,3 +1770,82 @@ function _buildLoginCalHTML(panel, events) {
   }
   panel.innerHTML = html;
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// ADD THESE FUNCTIONS TO THE END OF app.js
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Documents tab ─────────────────────────────────────────────────────────────
+window.switchToDocsTab = function () {
+  // Hide other panels
+  _hideCalendar();
+  document.getElementById("dashboard").style.display    = "none";
+  document.getElementById("homeCalendarPanel").style.display = "none";
+
+  // Show docs panel
+  document.getElementById("docsPanel").style.display    = "block";
+
+  // Hide FAB (not needed in docs view)
+  const fab = document.getElementById("fabAddBtn");
+  if (fab) fab.style.display = "none";
+
+  // Update bottom nav
+  document.getElementById("bnavHome")?.classList.remove("active");
+  document.getElementById("bnavCalendar")?.classList.remove("active");
+  document.getElementById("bnavDocs")?.classList.add("active");
+
+  // Admin dept tabs — deselect all
+  if (isAdmin) {
+    document.querySelectorAll(".dept-tab").forEach(b => b.classList.remove("active"));
+  }
+
+  // Init Drive (first time) and render
+  if (window._initDrive) window._initDrive();
+  if (window._renderDocsPanel) window._renderDocsPanel();
+};
+
+// ── Override switchToHomeTab to also hide docs panel ─────────────────────────
+const _origSwitchHome = window.switchToHomeTab;
+window.switchToHomeTab = function () {
+  // Hide docs panel
+  const docsPanel = document.getElementById("docsPanel");
+  if (docsPanel) docsPanel.style.display = "none";
+
+  // Show home calendar panel
+  const hcp = document.getElementById("homeCalendarPanel");
+  if (hcp) hcp.style.display = "block";
+
+  // Update bottom nav
+  document.getElementById("bnavDocs")?.classList.remove("active");
+  document.getElementById("bnavCalendar")?.classList.remove("active");
+  document.getElementById("bnavHome")?.classList.add("active");
+
+  // Show FAB
+  const fab = document.getElementById("fabAddBtn");
+  if (fab) fab.style.display = "grid";
+
+  // Restore dashboard and tasks
+  if (typeof _origSwitchHome === "function") {
+    _origSwitchHome();
+  } else {
+    calView = false;
+    document.getElementById("calendarPanel").style.display = "none";
+    document.getElementById("dashboard").style.display     = "";
+    if (isAdmin) {
+      document.querySelectorAll(".dept-tab").forEach(b => b.classList.remove("active"));
+      if (urgentView) {
+        document.querySelector("[data-dept='urgent-view']")?.classList.add("active");
+      } else {
+        document.querySelector(`[data-dept='${currentDept}']`)?.classList.add("active");
+      }
+    }
+  }
+};
+
+// ── Override switchToCalendarTab to hide docs panel ───────────────────────────
+const _origSwitchCal = window.switchToCalendarTab;
+window.switchToCalendarTab = function () {
+  const docsPanel = document.getElementById("docsPanel");
+  if (docsPanel) docsPanel.style.display = "none";
+  document.getElementById("bnavDocs")?.classList.remove("active");
+  if (typeof _origSwitchCal === "function") _origSwitchCal();
+};
