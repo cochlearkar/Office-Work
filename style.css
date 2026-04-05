@@ -1569,3 +1569,391 @@ body{
 .hcal-info{flex:1;min-width:0;}
 .hcal-title{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .hcal-time{font-size:11px;color:var(--text3);font-weight:600;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* ══════════════════════════════════════════════════════════════════════════════
+   DOCUMENTS TAB — add this to the END of style.css
+══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Docs panel wrapper ─────────────────────────── */
+.docs-wrap { padding: 0 0 100px; }
+
+/* ── Department tabs ────────────────────────────── */
+.docs-dept-tabs {
+  display: flex;
+  overflow-x: auto;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+  gap: 2px;
+  position: sticky;
+  top: 56px;
+  z-index: 10;
+}
+.docs-dept-tabs::-webkit-scrollbar { display: none; }
+.docs-dept-tab {
+  flex-shrink: 0;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text3);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.docs-dept-tab.active { color: var(--teal); border-bottom-color: var(--teal); }
+.docs-signout-tab { margin-left: auto; color: var(--text3); font-size: 16px; }
+
+/* ── Search bar ──────────────────────────────────── */
+.docs-search-wrap {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.docs-search {
+  flex: 1;
+  padding: 9px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  background: var(--bg);
+  transition: border .15s;
+}
+.docs-search:focus { border-color: var(--teal); background: #fff; }
+.docs-upload-btn {
+  padding: 8px 14px;
+  border: 1.5px solid var(--teal);
+  border-radius: 20px;
+  background: var(--teal-l);
+  color: var(--teal);
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.docs-upload-btn:hover { background: var(--teal-m); }
+
+/* ── Breadcrumb ──────────────────────────────────── */
+.docs-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.docs-breadcrumb::-webkit-scrollbar { display: none; }
+.docs-crumb {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--teal);
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: background .12s;
+}
+.docs-crumb:hover { background: var(--teal-l); }
+.docs-crumb-root { color: var(--text2); }
+.docs-crumb-root:hover { color: var(--teal); }
+.docs-crumb-sep { color: var(--text3); font-size: 14px; }
+
+/* ── File list ───────────────────────────────────── */
+.docs-filelist { padding: 8px 0; }
+.docs-section-lbl {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  padding: 10px 14px 4px;
+}
+
+/* Folder row */
+.docs-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .12s;
+}
+.docs-folder-row:hover { background: var(--bg); }
+.docs-folder-icon { font-size: 22px; flex-shrink: 0; }
+.docs-folder-arrow {
+  font-size: 18px;
+  color: var(--text3);
+  font-weight: 700;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* File row */
+.docs-file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  transition: background .12s;
+}
+.docs-file-row:hover { background: var(--bg); }
+.docs-file-icon { font-size: 22px; flex-shrink: 0; }
+.docs-file-info {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.docs-file-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.docs-file-meta {
+  font-size: 11px;
+  color: var(--text3);
+  font-weight: 600;
+  margin-top: 2px;
+}
+.docs-file-acts {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.docs-act-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-size: 14px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: var(--text3);
+  transition: background .12s, color .12s;
+}
+.docs-act-btn:hover { background: var(--teal-l); color: var(--teal); }
+
+/* ── New document buttons ────────────────────────── */
+.docs-new-row {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  position: sticky;
+  bottom: 56px;
+}
+.docs-new-row::-webkit-scrollbar { display: none; }
+.docs-new-btn {
+  flex-shrink: 0;
+  padding: 9px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg);
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.docs-new-btn:hover {
+  background: var(--teal-l);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+/* ── Sign-in screen ──────────────────────────────── */
+.docs-signin-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px 100px;
+  min-height: 60vh;
+}
+.docs-signin-card {
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 28px 24px;
+  text-align: center;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.08);
+  border: 1.5px solid var(--border);
+}
+.docs-signin-icon {
+  font-size: 42px;
+  margin-bottom: 12px;
+}
+.docs-signin-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.docs-signin-sub {
+  font-size: 13px;
+  color: var(--text3);
+  font-weight: 600;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.docs-signin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 20px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: 12px;
+  transition: background .15s, box-shadow .15s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.docs-signin-btn:hover {
+  background: var(--bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,.1);
+}
+.docs-signin-note {
+  font-size: 11px;
+  color: var(--text3);
+  font-weight: 600;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+/* ── Setup screen ────────────────────────────────── */
+.docs-setup-help {
+  background: var(--teal-l);
+  border: 1.5px solid var(--teal-m);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--teal-d);
+  text-align: left;
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+.docs-setup-help code {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  word-break: break-all;
+}
+.docs-setup-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  text-align: left;
+}
+.docs-setup-lbl {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text2);
+}
+.docs-setup-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  transition: border .15s;
+}
+.docs-setup-input:focus { border-color: var(--teal); }
+.docs-save-btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--teal);
+  color: #fff;
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  transition: background .15s;
+}
+.docs-save-btn:hover { background: var(--teal-d); }
+.docs-skip-btn {
+  width: 100%;
+  padding: 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: none;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text3);
+  cursor: pointer;
+}
+
+/* ── States ──────────────────────────────────────── */
+.docs-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 16px;
+  gap: 10px;
+  color: var(--text3);
+  font-size: 13px;
+  font-weight: 600;
+}
+.docs-empty {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--text3);
+}
+.docs-error {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text2);
+  font-size: 13px;
+}
+.docs-retry-btn {
+  padding: 8px 20px;
+  background: var(--teal);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  margin-top: 8px;
+}
