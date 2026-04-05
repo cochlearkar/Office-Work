@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -112,6 +113,7 @@
 
   <!-- ── CALENDAR PANEL (all users, shown when Calendar tab active) ── -->
   <div id="calendarPanel" style="display:none;padding:12px 14px 100px;"></div>
+  <div id="docsPanel" style="display:none;"></div>
 
   <!-- ── HOME CALENDAR (visible to everyone on home dashboard) ── -->
   <div id="homeCalendarPanel" class="home-calendar-panel">
@@ -131,6 +133,10 @@
     <button class="bnav-btn active" id="bnavHome" onclick="switchToHomeTab()">
       <span class="bnav-icon">✅</span>
       <span class="bnav-lbl">Tasks</span>
+    </button>
+    <button class="bnav-btn" id="bnavDocs" onclick="switchToDocsTab()">
+      <span class="bnav-icon">📄</span>
+      <span class="bnav-lbl">Documents</span>
     </button>
     <button class="bnav-btn" id="bnavCalendar" onclick="switchToCalendarTab()">
       <span class="bnav-icon">📅</span>
@@ -261,7 +267,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=2"></script>
 
 <!-- ── LOGIN CALENDAR OVERLAY ─────────────────────── -->
 <div id="loginCalOverlay" style="display:none;position:fixed;inset:0;background:#f1f5f9;z-index:9998;overflow-y:auto;">
