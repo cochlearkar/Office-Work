@@ -54,9 +54,19 @@ export function initDrive() {
         if (resp.error) { showDocsToast("Sign-in failed: " + resp.error, "error"); return; }
         accessToken = resp.access_token;
         driveSignedIn = true;
+        // Save token + expiry (55 min to be safe, tokens last 60)
+        sessionStorage.setItem("drive_token", accessToken);
+        sessionStorage.setItem("drive_token_exp", Date.now() + 55 * 60 * 1000);
         renderDocsPanel();
       },
     });
+    // Restore token from session if still valid
+    const saved    = sessionStorage.getItem("drive_token");
+    const savedExp = Number(sessionStorage.getItem("drive_token_exp") || 0);
+    if (saved && Date.now() < savedExp) {
+      accessToken   = saved;
+      driveSignedIn = true;
+    }
     driveReady = true;
   };
   tryInit();
@@ -69,6 +79,8 @@ window.driveSignIn = function () {
 
 window.driveSignOut = function () {
   if (accessToken) { google.accounts.oauth2.revoke(accessToken, () => {}); accessToken = null; }
+  sessionStorage.removeItem("drive_token");
+  sessionStorage.removeItem("drive_token_exp");
   driveSignedIn = false; folderStack = []; currentFolderId = null;
   renderDocsPanel();
 };
