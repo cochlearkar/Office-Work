@@ -3,6 +3,7 @@ import {
   collection, addDoc, getDocs, updateDoc, deleteDoc, doc,
   onSnapshot, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initDrive, renderDocsPanel } from "./docs.js";
 
 // ── Config ─────────────────────────────────────────
 const ADMIN = "Dr Basavaraj";
@@ -1799,8 +1800,8 @@ window.switchToDocsTab = function () {
   }
 
   // Init Drive (first time) and render
-  if (window._initDrive) window._initDrive();
-  if (window._renderDocsPanel) window._renderDocsPanel();
+  initDrive();
+  renderDocsPanel();
 };
 
 // ── Override switchToHomeTab to also hide docs panel ─────────────────────────
