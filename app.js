@@ -4,6 +4,10 @@ import {
   onSnapshot, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initDrive, renderDocsPanel } from "./docs.js";
+import { initCalls, switchToCallsTab, hideCallsPanel } from "./calls.js";
+
+// ── Expose calls tab switcher globally for onclick in HTML ──────────────────
+window.switchToCallsTabGlobal = switchToCallsTab;
 
 // ── Config ─────────────────────────────────────────
 const ADMIN = "Dr Basavaraj";
@@ -206,9 +210,7 @@ function loginAs(name) {
   );
 
   // ── Init Call Reminders module ────────────────────────────────────────────
-  if (window._initCalls) {
-    window._initCalls(currentUser, isAdmin, allStaff, avatarColors);
-  }
+  initCalls(currentUser, isAdmin, allStaff, avatarColors);
 }
 
 window.logout = function() {
@@ -1783,7 +1785,7 @@ function _buildLoginCalHTML(panel, events) {
 // ── Documents tab ─────────────────────────────────────────────────────────────
 window.switchToDocsTab = function () {
   // Hide calls panel
-  if (window._hideCallsPanel) window._hideCallsPanel();
+  hideCallsPanel();
   // Hide other panels
   _hideCalendar();
   document.getElementById("dashboard").style.display    = "none";
@@ -1815,7 +1817,7 @@ window.switchToDocsTab = function () {
 const _origSwitchHome = window.switchToHomeTab;
 window.switchToHomeTab = function () {
   // Hide calls panel
-  if (window._hideCallsPanel) window._hideCallsPanel();
+  hideCallsPanel();
   // Hide docs panel
   const docsPanel = document.getElementById("docsPanel");
   if (docsPanel) docsPanel.style.display = "none";
@@ -1854,7 +1856,7 @@ window.switchToHomeTab = function () {
 // ── Override switchToCalendarTab to hide docs panel ───────────────────────────
 const _origSwitchCal = window.switchToCalendarTab;
 window.switchToCalendarTab = function () {
-  if (window._hideCallsPanel) window._hideCallsPanel();
+  hideCallsPanel();
   const docsPanel = document.getElementById("docsPanel");
   if (docsPanel) docsPanel.style.display = "none";
   document.getElementById("bnavDocs")?.classList.remove("active");

@@ -51,9 +51,11 @@ function dayLabel(d) {
 }
 
 function avatarFor(name) {
+  const fallbackColors = ["#0d9488","#7c3aed","#db2777","#d97706","#2563eb","#059669","#dc2626"];
+  const colors = _avatarColors.length ? _avatarColors : fallbackColors;
   const idx    = _allStaff.indexOf(name);
-  const color  = _avatarColors[idx % _avatarColors.length] || "#0d9488";
-  const inits  = name.split(" ").filter(Boolean).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const color  = colors[Math.max(idx, 0) % colors.length];
+  const inits  = (name || "?").split(" ").filter(Boolean).map(w => w[0]).join("").slice(0, 2).toUpperCase();
   return { color, inits };
 }
 
@@ -111,13 +113,25 @@ export function hideCallsPanel() {
 
 // ── Live listener ──────────────────────────────────────────────────────────
 function startCallsListener() {
-  if (_callsUnsub) return; // already listening
+  if (_callsUnsub) {
+    // Already listening — force a re-render with an empty placeholder so panel shows immediately
+    const panel = document.getElementById("callsPanel");
+    if (panel && !panel.innerHTML.trim()) {
+      panel.innerHTML = `<div style="padding:40px;text-align:center;color:#94a3b8;font-size:13px;font-weight:600">Loading calls…</div>`;
+    }
+    return;
+  }
+  const panel = document.getElementById("callsPanel");
+  if (panel) panel.innerHTML = `<div style="padding:40px;text-align:center;color:#94a3b8;font-size:13px;font-weight:600">Loading calls…</div>`;
+
   const q = query(collection(db, CALLS_COL), orderBy("scheduledDate", "asc"));
   _callsUnsub = onSnapshot(q, snap => {
     const calls = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderCallsPanel(calls);
   }, err => {
     console.error("Calls listener:", err.message);
+    const p = document.getElementById("callsPanel");
+    if (p) p.innerHTML = `<div style="padding:40px;text-align:center;color:#ef4444;font-size:13px;font-weight:600">⚠️ Could not load calls: ${err.message}</div>`;
   });
 }
 
@@ -258,15 +272,19 @@ function callCard(c) {
 // ADD CALL MODAL
 // ══════════════════════════════════════════════════════════════════════════
 window.openAddCallModal = function () {
+  // Populate staff dropdown fresh every time
   _populateCallStaffSelect("callAssignTo");
-  document.getElementById("callContactName").value   = "";
-  document.getElementById("callContactPhone").value  = "";
-  document.getElementById("callPurpose").value       = "";
-  document.getElementById("callNotes").value         = "";
-  document.getElementById("callDate").value          = new Date().toISOString().slice(0, 10);
-  document.getElementById("callTime").value          = "";
-  document.getElementById("callType").value          = "outbound";
-  document.getElementById("callPriority").value      = "p3";
+
+  // Reset all fields
+  document.getElementById("callContactName").value  = "";
+  document.getElementById("callContactPhone").value = "";
+  document.getElementById("callPurpose").value      = "";
+  document.getElementById("callNotes").value        = "";
+  document.getElementById("callDate").value         = new Date().toISOString().slice(0, 10);
+  document.getElementById("callTime").value         = "";
+  document.getElementById("callType").value         = "outbound";
+  document.getElementById("callPriority").value     = "p3";
+
   document.getElementById("addCallModal").style.display = "flex";
   setTimeout(() => document.getElementById("callContactName").focus(), 100);
 };
@@ -281,11 +299,11 @@ window.closeAddCallIfOutside = function (e) {
 
 window.saveAddCall = async function () {
   const contactName = document.getElementById("callContactName").value.trim();
-  const assignedTo  = document.getElementById("callAssignTo").value;
+  // If staff (not admin), auto-assign to self; admins pick from dropdown
+  const assignedTo  = document.getElementById("callAssignTo").value || _currentUser;
   const dateVal     = document.getElementById("callDate").value;
 
-  if (!contactName) { showToast("Enter contact name", "error"); return; }
-  if (!assignedTo)  { showToast("Assign to someone", "error"); return; }
+  if (!contactName) { showToast("Enter a contact name", "error"); return; }
   if (!dateVal)     { showToast("Pick a date", "error"); return; }
 
   const btn = document.getElementById("saveCallBtn");
@@ -431,8 +449,10 @@ window.toggleCallDone = async function (id, markDone) {
 function _populateCallStaffSelect(selId, selected = null) {
   const sel = document.getElementById(selId);
   if (!sel) return;
-  sel.innerHTML = `<option value="">— Assign to —</option>` +
-    _allStaff.map(s =>
-      `<option value="${s}" ${s === (selected || _currentUser) ? "selected" : ""}>${s}</option>`
-    ).join("");
+  const autoSelect = selected || _currentUser;
+  // Use _allStaff if available, otherwise build a minimal fallback
+  const staff = _allStaff.length ? _allStaff : [_currentUser].filter(Boolean);
+  sel.innerHTML = staff.map(s =>
+    `<option value="${s}" ${s === autoSelect ? "selected" : ""}>${s}</option>`
+  ).join("");
 }
