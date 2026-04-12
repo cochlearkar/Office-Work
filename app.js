@@ -204,6 +204,11 @@ function loginAs(name) {
     },
     err => { console.error("Live listener error:", err.message); }
   );
+
+  // ── Init Call Reminders module ────────────────────────────────────────────
+  if (window._initCalls) {
+    window._initCalls(currentUser, isAdmin, allStaff, avatarColors);
+  }
 }
 
 window.logout = function() {
@@ -1777,6 +1782,8 @@ function _buildLoginCalHTML(panel, events) {
 
 // ── Documents tab ─────────────────────────────────────────────────────────────
 window.switchToDocsTab = function () {
+  // Hide calls panel
+  if (window._hideCallsPanel) window._hideCallsPanel();
   // Hide other panels
   _hideCalendar();
   document.getElementById("dashboard").style.display    = "none";
@@ -1807,6 +1814,8 @@ window.switchToDocsTab = function () {
 // ── Override switchToHomeTab to also hide docs panel ─────────────────────────
 const _origSwitchHome = window.switchToHomeTab;
 window.switchToHomeTab = function () {
+  // Hide calls panel
+  if (window._hideCallsPanel) window._hideCallsPanel();
   // Hide docs panel
   const docsPanel = document.getElementById("docsPanel");
   if (docsPanel) docsPanel.style.display = "none";
@@ -1845,6 +1854,7 @@ window.switchToHomeTab = function () {
 // ── Override switchToCalendarTab to hide docs panel ───────────────────────────
 const _origSwitchCal = window.switchToCalendarTab;
 window.switchToCalendarTab = function () {
+  if (window._hideCallsPanel) window._hideCallsPanel();
   const docsPanel = document.getElementById("docsPanel");
   if (docsPanel) docsPanel.style.display = "none";
   document.getElementById("bnavDocs")?.classList.remove("active");

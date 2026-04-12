@@ -12,5 +12,10 @@ service cloud.firestore {
       }
     }
 
+    // Call Reminders — all reads/writes open (no auth in this app)
+    match /callReminders/{callId} {
+      allow read, write: if true;
+    }
+
   }
 }

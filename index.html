@@ -114,6 +114,7 @@
   <!-- ── CALENDAR PANEL (all users, shown when Calendar tab active) ── -->
   <div id="calendarPanel" style="display:none;padding:12px 14px 100px;"></div>
   <div id="docsPanel" style="display:none;"></div>
+  <div id="callsPanel" style="display:none;padding-bottom:100px;"></div>
 
   <!-- ── HOME CALENDAR (visible to everyone on home dashboard) ── -->
   <div id="homeCalendarPanel" class="home-calendar-panel">
@@ -141,6 +142,10 @@
     <button class="bnav-btn" id="bnavCalendar" onclick="switchToCalendarTab()">
       <span class="bnav-icon">📅</span>
       <span class="bnav-lbl">Calendar</span>
+    </button>
+    <button class="bnav-btn" id="bnavCalls" onclick="window.switchToCallsTabGlobal()">
+      <span class="bnav-icon">📞</span>
+      <span class="bnav-lbl">Calls</span>
     </button>
   </nav>
 
@@ -268,6 +273,130 @@
 
 <div class="toast" id="toast"></div>
 <script type="module" src="app.js?v=2"></script>
+
+<!-- ── ADD CALL MODAL ──────────────────────────────── -->
+<div class="modal-overlay" id="addCallModal" style="display:none" onclick="closeAddCallIfOutside(event)">
+  <div class="modal-sheet calls-modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📞 Schedule a Call</div>
+    <label class="calls-label">Contact Name *</label>
+    <input id="callContactName" class="modal-input" placeholder="Patient / Vendor / Hospital…"/>
+    <label class="calls-label">Phone Number</label>
+    <input id="callContactPhone" class="modal-input" placeholder="+91 98765 43210" type="tel"/>
+    <label class="calls-label">Purpose / Reason</label>
+    <input id="callPurpose" class="modal-input" placeholder="e.g. Follow-up on report, Appointment confirm…"/>
+    <div class="modal-row" style="gap:8px;margin-bottom:10px">
+      <div style="flex:1">
+        <label class="calls-label">Date *</label>
+        <input id="callDate" class="modal-input" type="date" style="margin-bottom:0"/>
+      </div>
+      <div style="flex:1">
+        <label class="calls-label">Time (optional)</label>
+        <input id="callTime" class="modal-input" type="time" style="margin-bottom:0"/>
+      </div>
+    </div>
+    <div class="modal-row" style="gap:8px;margin-bottom:10px">
+      <div style="flex:1">
+        <label class="calls-label">Call Type</label>
+        <select id="callType" class="mini-select" style="width:100%">
+          <option value="outbound">📤 Outbound</option>
+          <option value="inbound">📲 Inbound</option>
+          <option value="followup">🔄 Follow-up</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <label class="calls-label">Priority</label>
+        <select id="callPriority" class="mini-select" style="width:100%">
+          <option value="p1">🔴 Urgent</option>
+          <option value="p2">🟠 High</option>
+          <option value="p3" selected>🔵 Normal</option>
+          <option value="p4">⚪ Low</option>
+        </select>
+      </div>
+    </div>
+    <label class="calls-label">Assign to *</label>
+    <select id="callAssignTo" class="modal-input" style="padding:10px 14px;margin-bottom:10px"></select>
+    <label class="calls-label">Internal Notes (optional)</label>
+    <textarea id="callNotes" class="modal-input calls-textarea" placeholder="Extra context…" rows="2"></textarea>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="modal-cancel" onclick="closeAddCallModal()">Cancel</button>
+      <button class="modal-save"   onclick="saveAddCall()" id="saveCallBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── EDIT CALL MODAL (admin only) ───────────────── -->
+<div class="modal-overlay" id="editCallModal" style="display:none" onclick="closeEditCallIfOutside(event)">
+  <div class="modal-sheet calls-modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✏️ Edit Call Reminder</div>
+    <label class="calls-label">Contact Name *</label>
+    <input id="editCallContactName" class="modal-input" placeholder="Contact name"/>
+    <label class="calls-label">Phone Number</label>
+    <input id="editCallContactPhone" class="modal-input" placeholder="+91 98765 43210" type="tel"/>
+    <label class="calls-label">Purpose / Reason</label>
+    <input id="editCallPurpose" class="modal-input" placeholder="Purpose…"/>
+    <div class="modal-row" style="gap:8px;margin-bottom:10px">
+      <div style="flex:1">
+        <label class="calls-label">Date *</label>
+        <input id="editCallDate" class="modal-input" type="date" style="margin-bottom:0"/>
+      </div>
+      <div style="flex:1">
+        <label class="calls-label">Time (optional)</label>
+        <input id="editCallTime" class="modal-input" type="time" style="margin-bottom:0"/>
+      </div>
+    </div>
+    <div class="modal-row" style="gap:8px;margin-bottom:10px">
+      <div style="flex:1">
+        <label class="calls-label">Call Type</label>
+        <select id="editCallType" class="mini-select" style="width:100%">
+          <option value="outbound">📤 Outbound</option>
+          <option value="inbound">📲 Inbound</option>
+          <option value="followup">🔄 Follow-up</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <label class="calls-label">Priority</label>
+        <select id="editCallPriority" class="mini-select" style="width:100%">
+          <option value="p1">🔴 Urgent</option>
+          <option value="p2">🟠 High</option>
+          <option value="p3">🔵 Normal</option>
+          <option value="p4">⚪ Low</option>
+        </select>
+      </div>
+    </div>
+    <label class="calls-label">Assign to</label>
+    <select id="editCallAssignTo" class="modal-input" style="padding:10px 14px;margin-bottom:10px"></select>
+    <label class="calls-label">Internal Notes</label>
+    <textarea id="editCallNotes" class="modal-input calls-textarea" placeholder="Extra context…" rows="2"></textarea>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="modal-cancel" onclick="closeEditCallModal()">Cancel</button>
+      <button class="modal-save"   onclick="saveEditCall()" id="saveEditCallBtn">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── DELETE CALL MODAL ───────────────────────────── -->
+<div class="modal-overlay" id="deleteCallModal" style="display:none">
+  <div class="modal-sheet compact">
+    <div class="modal-handle"></div>
+    <div class="del-icon">📵</div>
+    <div class="modal-title">Delete this call reminder?</div>
+    <p class="modal-sub">This cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="modal-cancel"  onclick="closeDeleteCallModal()">Cancel</button>
+      <button class="modal-del-btn" onclick="confirmDeleteCall()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CALLS MODULE ────────────────────────────────── -->
+<script type="module">
+  import { initCalls, switchToCallsTab, hideCallsPanel } from "./calls.js";
+  window.switchToCallsTabGlobal = switchToCallsTab;
+  window._initCalls      = initCalls;
+  window._hideCallsPanel = hideCallsPanel;
+</script>
 
 <!-- ── LOGIN CALENDAR OVERLAY ─────────────────────── -->
 <div id="loginCalOverlay" style="display:none;position:fixed;inset:0;background:#f1f5f9;z-index:9998;overflow-y:auto;">
