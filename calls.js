@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // calls.js  —  Call Reminders module for TaskFlow
-// Drop this file next to app.js and follow index.html / style.css patch notes.
+// Features: Contact Picker, Push Notifications, In-app reminders, Tap-to-call
 // ═══════════════════════════════════════════════════════════════════════════
 import { db } from "./firebase.js";
 import {
@@ -14,18 +14,96 @@ let _isAdmin      = false;
 let _allStaff     = [];
 let _avatarColors = [];
 
-/** Called once from app.js loginAs() so this module knows who is logged in. */
 export function initCalls(currentUser, isAdmin, allStaff, avatarColors) {
   _currentUser  = currentUser;
   _isAdmin      = isAdmin;
   _allStaff     = allStaff;
   _avatarColors = avatarColors;
+  _initNotifications();
 }
 
 // ── Firestore collection ───────────────────────────────────────────────────
 const CALLS_COL = "callReminders";
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── In-memory reminder timers ──────────────────────────────────────────────
+let _reminderTimers = [];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function _initNotifications() {
+  if ("serviceWorker" in navigator) {
+    try { await navigator.serviceWorker.register("/sw.js"); }
+    catch(e) { console.warn("SW registration failed:", e.message); }
+  }
+  // Ask for permission after a short delay so it's not intrusive on login
+  if ("Notification" in window && Notification.permission === "default") {
+    setTimeout(async () => {
+      const perm = await Notification.requestPermission();
+      if (perm === "granted") showToast("🔔 Call reminders enabled", "success");
+    }, 3000);
+  }
+}
+
+function _scheduleReminder(call) {
+  if (!call.scheduledDate || !call.scheduledTime) return;
+  if (Notification.permission !== "granted") return;
+  const dateStr = toDate(call.scheduledDate).toISOString().slice(0, 10);
+  const dt = new Date(`${dateStr}T${call.scheduledTime}:00`);
+  const ms = dt - Date.now();
+  if (ms <= 0 || ms > 86400000) return; // only schedule if within next 24h
+  const t = setTimeout(() => _fireNotification(call), ms);
+  _reminderTimers.push(t);
+}
+
+function _fireNotification(call) {
+  if (Notification.permission !== "granted") return;
+  const title = `📞 Call Reminder: ${call.contactName}`;
+  const body  = [
+    call.purpose      ? call.purpose              : "",
+    call.contactPhone ? `📱 ${call.contactPhone}` : "",
+    `Assigned to: ${call.assignedTo}`
+  ].filter(Boolean).join("\n");
+
+  if (navigator.serviceWorker?.controller) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(title, {
+        body, tag: `call-${call.id}`, vibrate: [200, 100, 200],
+        data: { phone: call.contactPhone || "" },
+        actions: [
+          { action: "call",    title: "📞 Call Now" },
+          { action: "dismiss", title: "Dismiss"     }
+        ]
+      });
+    });
+  } else {
+    new Notification(title, { body, tag: `call-${call.id}` });
+  }
+}
+
+function _clearAllTimers() {
+  _reminderTimers.forEach(clearTimeout);
+  _reminderTimers = [];
+}
+
+function _scheduleAllReminders(calls) {
+  _clearAllTimers();
+  const today = new Date().toISOString().slice(0, 10);
+  calls
+    .filter(c =>
+      c.status !== "done" &&
+      c.scheduledTime &&
+      toDate(c.scheduledDate).toISOString().slice(0, 10) === today &&
+      (c.assignedTo === _currentUser || _isAdmin)
+    )
+    .forEach(_scheduleReminder);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
 function toDate(v) {
   if (!v) return new Date();
   if (typeof v.toDate === "function") return v.toDate();
@@ -42,20 +120,20 @@ function fmt12(slot) {
 
 function dayLabel(d) {
   const now  = new Date(); now.setHours(0, 0, 0, 0);
-  const diff = Math.round((new Date(d).setHours(0,0,0,0) - now) / 86400000);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Tomorrow";
+  const diff = Math.round((new Date(d).setHours(0, 0, 0, 0) - now) / 86400000);
+  if (diff === 0)  return "Today";
+  if (diff === 1)  return "Tomorrow";
   if (diff === -1) return "Yesterday";
-  if (diff < 0) return `${Math.abs(diff)}d overdue`;
+  if (diff < 0)   return `${Math.abs(diff)}d overdue`;
   return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
 function avatarFor(name) {
-  const fallbackColors = ["#0d9488","#7c3aed","#db2777","#d97706","#2563eb","#059669","#dc2626"];
-  const colors = _avatarColors.length ? _avatarColors : fallbackColors;
-  const idx    = _allStaff.indexOf(name);
-  const color  = colors[Math.max(idx, 0) % colors.length];
-  const inits  = (name || "?").split(" ").filter(Boolean).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const fallback = ["#0d9488","#7c3aed","#db2777","#d97706","#2563eb","#059669","#dc2626"];
+  const colors   = _avatarColors.length ? _avatarColors : fallback;
+  const idx      = _allStaff.indexOf(name);
+  const color    = colors[Math.max(idx, 0) % colors.length];
+  const inits    = (name || "?").split(" ").filter(Boolean).map(w => w[0]).join("").slice(0, 2).toUpperCase();
   return { color, inits };
 }
 
@@ -65,100 +143,100 @@ function showToast(msg, type = "") {
   el.textContent = msg;
   el.className   = "toast show" + (type ? " toast-" + type : "");
   clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.remove("show"), 2600);
+  el._t = setTimeout(() => el.classList.remove("show"), 2800);
 }
 
 // ── Live listener handle ───────────────────────────────────────────────────
 let _callsUnsub = null;
 
-// ══════════════════════════════════════════════════════════════════════════
-// PUBLIC: Switch to Calls tab
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════════════
+
 export function switchToCallsTab() {
-  // Hide all other panels
-  const panels = ["dashboard", "calendarPanel", "docsPanel", "homeCalendarPanel"];
-  panels.forEach(id => {
+  ["dashboard", "calendarPanel", "docsPanel", "homeCalendarPanel"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = "none";
   });
-
-  // Show calls panel
-  const cp = document.getElementById("callsPanel");
-  if (cp) cp.style.display = "block";
-
-  // Update bottom nav
+  document.getElementById("callsPanel").style.display = "block";
   ["bnavHome", "bnavCalendar", "bnavDocs"].forEach(id =>
     document.getElementById(id)?.classList.remove("active")
   );
   document.getElementById("bnavCalls")?.classList.add("active");
-
-  // Hide FAB (calls has its own add button)
   const fab = document.getElementById("fabAddBtn");
   if (fab) fab.style.display = "none";
-
-  // Admin dept tabs — deselect
   document.querySelectorAll(".dept-tab")?.forEach(b => b.classList.remove("active"));
-
-  // Start live listener
   startCallsListener();
 }
 
-// Called from home tab switch so calls panel is hidden properly
 export function hideCallsPanel() {
   const cp = document.getElementById("callsPanel");
   if (cp) cp.style.display = "none";
   document.getElementById("bnavCalls")?.classList.remove("active");
   if (_callsUnsub) { _callsUnsub(); _callsUnsub = null; }
+  _clearAllTimers();
 }
 
-// ── Live listener ──────────────────────────────────────────────────────────
 function startCallsListener() {
-  if (_callsUnsub) {
-    // Already listening — force a re-render with an empty placeholder so panel shows immediately
-    const panel = document.getElementById("callsPanel");
-    if (panel && !panel.innerHTML.trim()) {
-      panel.innerHTML = `<div style="padding:40px;text-align:center;color:#94a3b8;font-size:13px;font-weight:600">Loading calls…</div>`;
-    }
-    return;
-  }
+  if (_callsUnsub) return;
   const panel = document.getElementById("callsPanel");
-  if (panel) panel.innerHTML = `<div style="padding:40px;text-align:center;color:#94a3b8;font-size:13px;font-weight:600">Loading calls…</div>`;
-
+  if (panel) panel.innerHTML = `<div class="calls-loading">Loading calls…</div>`;
   const q = query(collection(db, CALLS_COL), orderBy("scheduledDate", "asc"));
   _callsUnsub = onSnapshot(q, snap => {
     const calls = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderCallsPanel(calls);
+    _scheduleAllReminders(calls);
   }, err => {
     console.error("Calls listener:", err.message);
     const p = document.getElementById("callsPanel");
-    if (p) p.innerHTML = `<div style="padding:40px;text-align:center;color:#ef4444;font-size:13px;font-weight:600">⚠️ Could not load calls: ${err.message}</div>`;
+    if (p) p.innerHTML = `<div class="calls-error">⚠️ Could not load calls: ${err.message}</div>`;
   });
 }
 
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // RENDER
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+
 function renderCallsPanel(calls) {
   const panel = document.getElementById("callsPanel");
   if (!panel) return;
 
-  // ── Filter for current user (staff sees only their calls; admin sees all) ─
-  const visible = _isAdmin
+  const visible  = _isAdmin
     ? calls
     : calls.filter(c => c.assignedTo === _currentUser || c.createdBy === _currentUser);
-
-  const pending   = visible.filter(c => c.status !== "done");
-  const done      = visible.filter(c => c.status === "done");
-  const overdue   = pending.filter(c => {
+  const pending  = visible.filter(c => c.status !== "done");
+  const done     = visible.filter(c => c.status === "done");
+  const overdue  = pending.filter(c => {
     const d = toDate(c.scheduledDate); d.setHours(0,0,0,0);
     const n = new Date(); n.setHours(0,0,0,0);
     return d < n;
   });
-  const todayC    = pending.filter(c => dayLabel(toDate(c.scheduledDate)) === "Today");
-  const upcoming  = pending.filter(c => {
+  const todayC   = pending.filter(c => dayLabel(toDate(c.scheduledDate)) === "Today");
+  const upcoming = pending.filter(c => {
     const lbl = dayLabel(toDate(c.scheduledDate));
     return lbl !== "Today" && !lbl.includes("overdue");
   });
+
+  // ── Notification permission nudge ────────────────────────────────────────
+  const notifNudge = ("Notification" in window && Notification.permission === "default") ? `
+    <div class="calls-notif-nudge" onclick="window._requestCallNotifPermission()">
+      🔔 <strong>Enable call reminders</strong> — get notified at call time
+      <span class="nudge-arrow">→</span>
+    </div>` : "";
+
+  // ── In-app alert banner ───────────────────────────────────────────────────
+  const urgentCount = overdue.length + todayC.length;
+  const alertBanner = urgentCount > 0 ? `
+    <div class="calls-alert-banner">
+      <div class="calls-alert-icon">🔔</div>
+      <div class="calls-alert-body">
+        <div class="calls-alert-title">Calls Need Attention</div>
+        <div class="calls-alert-chips">
+          ${overdue.length ? `<span class="alert-chip alert-chip-red">⚠️ ${overdue.length} overdue</span>` : ""}
+          ${todayC.length  ? `<span class="alert-chip alert-chip-amber">📅 ${todayC.length} due today</span>` : ""}
+        </div>
+      </div>
+    </div>` : "";
 
   // ── Stats bar ─────────────────────────────────────────────────────────────
   const statsBar = `
@@ -181,16 +259,13 @@ function renderCallsPanel(calls) {
       </div>
     </div>`;
 
-  // ── Add button ────────────────────────────────────────────────────────────
   const addBar = `
     <button class="calls-add-btn" onclick="window.openAddCallModal()">
       📞 Schedule a Call
     </button>`;
 
-  // ── Section builder ───────────────────────────────────────────────────────
   function section(title, icon, accent, bg, list) {
     if (!list.length) return "";
-    const rows = list.map(c => callCard(c)).join("");
     return `
       <div class="calls-section">
         <div class="calls-sec-hdr" style="background:${bg}">
@@ -198,49 +273,53 @@ function renderCallsPanel(calls) {
           <span class="calls-sec-title" style="color:${accent}">${title}</span>
           <span class="calls-sec-count" style="background:${accent}20;color:${accent}">${list.length}</span>
         </div>
-        <div class="calls-sec-body">${rows}</div>
+        <div class="calls-sec-body">${list.map(callCard).join("")}</div>
       </div>`;
   }
 
   const content =
-    section("Overdue Calls", "⚠️", "#dc2626", "#fef2f2", overdue) +
-    section("Today's Calls", "📞", "#d97706", "#fffbeb", todayC) +
-    section("Upcoming", "📅", "#0d9488", "#f0fdfa", upcoming) +
+    section("Overdue Calls", "⚠️", "#dc2626", "#fef2f2", overdue)  +
+    section("Today's Calls", "📞", "#d97706", "#fffbeb", todayC)   +
+    section("Upcoming",      "📅", "#0d9488", "#f0fdfa", upcoming) +
     (done.length ? section("Completed", "✅", "#64748b", "#f8fafc", done) : "");
 
-  const empty = !pending.length && !done.length
-    ? `<div class="calls-empty">
-         <div class="calls-empty-icon">📵</div>
-         <div class="calls-empty-title">No call reminders yet</div>
-         <div class="calls-empty-sub">Tap "Schedule a Call" to add one</div>
-       </div>`
-    : "";
+  const empty = !pending.length && !done.length ? `
+    <div class="calls-empty">
+      <div class="calls-empty-icon">📵</div>
+      <div class="calls-empty-title">No call reminders yet</div>
+      <div class="calls-empty-sub">Tap "Schedule a Call" to add one</div>
+    </div>` : "";
 
-  panel.innerHTML = statsBar + addBar + content + empty;
+  panel.innerHTML = notifNudge + alertBanner + statsBar + addBar + content + empty;
 }
 
-// ── Individual call card ────────────────────────────────────────────────────
+// ── Call card ──────────────────────────────────────────────────────────────
 function callCard(c) {
-  const av      = avatarFor(c.assignedTo || "?");
-  const done    = c.status === "done";
-  const dateLbl = dayLabel(toDate(c.scheduledDate));
-  const timeTxt = c.scheduledTime ? fmt12(c.scheduledTime) : "";
+  const av        = avatarFor(c.assignedTo || "?");
+  const done      = c.status === "done";
+  const dateLbl   = dayLabel(toDate(c.scheduledDate));
+  const timeTxt   = c.scheduledTime ? fmt12(c.scheduledTime) : "";
   const isOverdue = dateLbl.includes("overdue");
+  const typeIcon  = { inbound:"📲", outbound:"📤", followup:"🔄" }[c.callType] || "📞";
+  const priDot    = { p1:"#ef4444", p2:"#f97316", p3:"#3b82f6", p4:"#94a3b8" }[c.priority||"p3"];
 
-  const typeIcon = { inbound: "📲", outbound: "📤", followup: "🔄" }[c.callType] || "📞";
-  const priorityDot = { p1: "#ef4444", p2: "#f97316", p3: "#3b82f6", p4: "#94a3b8" }[c.priority || "p3"];
-
-  const adminActions = _isAdmin ? `
-    <button class="cc-action-btn cc-edit" onclick="window.openEditCallModal('${c.id}')" title="Edit">✏️</button>
-    <button class="cc-action-btn cc-del"  onclick="window.openDeleteCallModal('${c.id}')" title="Delete">🗑</button>
-  ` : "";
+  // Prominent tap-to-call button
+  const dialBtn = c.contactPhone ? `
+    <a class="cc-dial-btn" href="tel:${c.contactPhone}">
+      📞 ${c.contactPhone}
+    </a>` : "";
 
   const doneBtn = `
     <button class="cc-done-btn ${done ? "cc-done-active" : ""}"
-      onclick="window.toggleCallDone('${c.id}', ${!done})"
-      title="${done ? "Mark pending" : "Mark done"}">
-      ${done ? "✅ Done" : "○ Mark Done"}
+      onclick="window.toggleCallDone('${c.id}', ${!done})">
+      ${done ? "✅ Done" : "○ Done"}
     </button>`;
+
+  const adminActions = _isAdmin ? `
+    <div class="cc-admin-btns">
+      <button class="cc-action-btn cc-edit" onclick="window.openEditCallModal('${c.id}')" title="Edit">✏️</button>
+      <button class="cc-action-btn cc-del"  onclick="window.openDeleteCallModal('${c.id}')" title="Delete">🗑</button>
+    </div>` : "";
 
   return `
     <div class="call-card ${done ? "call-card-done" : isOverdue ? "call-card-overdue" : ""}">
@@ -251,13 +330,15 @@ function callCard(c) {
         <div class="cc-top">
           <span class="cc-type-icon">${typeIcon}</span>
           <span class="cc-contact">${c.contactName || "(No name)"}</span>
-          ${c.contactPhone ? `<a class="cc-phone-link" href="tel:${c.contactPhone}">📱 ${c.contactPhone}</a>` : ""}
+          <span class="cc-pri-dot" style="background:${priDot}"></span>
         </div>
+        ${dialBtn}
         ${c.purpose ? `<div class="cc-purpose">${c.purpose}</div>` : ""}
         <div class="cc-meta">
-          <span class="cc-assignee">${c.assignedTo}</span>
-          <span class="cc-date ${isOverdue ? "cc-date-red" : dateLbl === "Today" ? "cc-date-amber" : ""}">${dateLbl}${timeTxt ? " · " + timeTxt : ""}</span>
-          <span class="cc-pri-dot" style="background:${priorityDot}"></span>
+          <span class="cc-assignee">👤 ${c.assignedTo}</span>
+          <span class="cc-date ${isOverdue ? "cc-date-red" : dateLbl==="Today" ? "cc-date-amber" : ""}">
+            ${dateLbl}${timeTxt ? " · "+timeTxt : ""}
+          </span>
         </div>
         ${c.notes ? `<div class="cc-notes">${c.notes}</div>` : ""}
       </div>
@@ -268,14 +349,52 @@ function callCard(c) {
     </div>`;
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// ADD CALL MODAL
-// ══════════════════════════════════════════════════════════════════════════
-window.openAddCallModal = function () {
-  // Populate staff dropdown fresh every time
-  _populateCallStaffSelect("callAssignTo");
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTACT PICKER  (Android Chrome — hidden on unsupported devices)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  // Reset all fields
+window._contactPickerSupported = () =>
+  "contacts" in navigator && "ContactsManager" in window;
+
+window.pickContact = async function () {
+  if (!window._contactPickerSupported()) return;
+  try {
+    const [c] = await navigator.contacts.select(["name", "tel"], { multiple: false });
+    if (!c) return;
+    document.getElementById("callContactName").value  = c.name?.[0]  || "";
+    document.getElementById("callContactPhone").value = c.tel?.[0]   || "";
+    showToast("Contact filled ✓", "success");
+  } catch(e) { showToast("Could not open contacts", ""); }
+};
+
+window.pickContactEdit = async function () {
+  if (!window._contactPickerSupported()) return;
+  try {
+    const [c] = await navigator.contacts.select(["name", "tel"], { multiple: false });
+    if (!c) return;
+    document.getElementById("editCallContactName").value  = c.name?.[0] || "";
+    document.getElementById("editCallContactPhone").value = c.tel?.[0]  || "";
+    showToast("Contact filled ✓", "success");
+  } catch(e) { showToast("Could not open contacts", ""); }
+};
+
+window._requestCallNotifPermission = async function () {
+  if (!("Notification" in window)) return;
+  const perm = await Notification.requestPermission();
+  if (perm === "granted") {
+    showToast("🔔 Reminders enabled!", "success");
+    document.querySelector(".calls-notif-nudge")?.remove();
+  } else {
+    showToast("Notifications blocked — enable in browser settings", "");
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADD CALL MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+window.openAddCallModal = function () {
+  _populateCallStaffSelect("callAssignTo");
   document.getElementById("callContactName").value  = "";
   document.getElementById("callContactPhone").value = "";
   document.getElementById("callPurpose").value      = "";
@@ -284,7 +403,9 @@ window.openAddCallModal = function () {
   document.getElementById("callTime").value         = "";
   document.getElementById("callType").value         = "outbound";
   document.getElementById("callPriority").value     = "p3";
-
+  // Show contact picker only on supported devices
+  const btn = document.getElementById("contactPickerBtn");
+  if (btn) btn.style.display = window._contactPickerSupported() ? "flex" : "none";
   document.getElementById("addCallModal").style.display = "flex";
   setTimeout(() => document.getElementById("callContactName").focus(), 100);
 };
@@ -292,23 +413,18 @@ window.openAddCallModal = function () {
 window.closeAddCallModal = function () {
   document.getElementById("addCallModal").style.display = "none";
 };
-
 window.closeAddCallIfOutside = function (e) {
   if (e.target === document.getElementById("addCallModal")) window.closeAddCallModal();
 };
 
 window.saveAddCall = async function () {
   const contactName = document.getElementById("callContactName").value.trim();
-  // If staff (not admin), auto-assign to self; admins pick from dropdown
   const assignedTo  = document.getElementById("callAssignTo").value || _currentUser;
   const dateVal     = document.getElementById("callDate").value;
-
   if (!contactName) { showToast("Enter a contact name", "error"); return; }
   if (!dateVal)     { showToast("Pick a date", "error"); return; }
-
   const btn = document.getElementById("saveCallBtn");
   btn.textContent = "Saving…"; btn.disabled = true;
-
   try {
     await addDoc(collection(db, CALLS_COL), {
       contactName,
@@ -326,36 +442,32 @@ window.saveAddCall = async function () {
     });
     showToast("Call reminder saved ✓", "success");
     window.closeAddCallModal();
-  } catch (e) {
-    showToast("Error saving: " + e.message, "error");
-  }
+  } catch (e) { showToast("Error saving: " + e.message, "error"); }
   btn.textContent = "Save"; btn.disabled = false;
 };
 
-// ══════════════════════════════════════════════════════════════════════════
-// EDIT CALL MODAL  (admin only)
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// EDIT CALL MODAL
+// ═══════════════════════════════════════════════════════════════════════════
 let _editCallId = null;
 
 window.openEditCallModal = function (id) {
   if (!_isAdmin) return;
   _editCallId = id;
-  // Fetch from Firestore in case data is fresh
-  const panel = document.getElementById("callsPanel");
-  // We rely on the live snapshot data already rendered — read from DOM attrs
-  // Better: fetch directly
   getDocs(collection(db, CALLS_COL)).then(snap => {
     const c = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(c => c.id === id);
     if (!c) return;
     _populateCallStaffSelect("editCallAssignTo", c.assignedTo);
-    document.getElementById("editCallContactName").value  = c.contactName  || "";
-    document.getElementById("editCallContactPhone").value = c.contactPhone || "";
-    document.getElementById("editCallPurpose").value      = c.purpose      || "";
-    document.getElementById("editCallNotes").value        = c.notes        || "";
+    document.getElementById("editCallContactName").value  = c.contactName   || "";
+    document.getElementById("editCallContactPhone").value = c.contactPhone  || "";
+    document.getElementById("editCallPurpose").value      = c.purpose       || "";
+    document.getElementById("editCallNotes").value        = c.notes         || "";
     document.getElementById("editCallDate").value         = toDate(c.scheduledDate).toISOString().slice(0, 10);
     document.getElementById("editCallTime").value         = c.scheduledTime || "";
-    document.getElementById("editCallType").value         = c.callType     || "outbound";
-    document.getElementById("editCallPriority").value     = c.priority     || "p3";
+    document.getElementById("editCallType").value         = c.callType      || "outbound";
+    document.getElementById("editCallPriority").value     = c.priority      || "p3";
+    const btn = document.getElementById("contactPickerBtnEdit");
+    if (btn) btn.style.display = window._contactPickerSupported() ? "flex" : "none";
     document.getElementById("editCallModal").style.display = "flex";
     setTimeout(() => document.getElementById("editCallContactName").focus(), 100);
   });
@@ -365,7 +477,6 @@ window.closeEditCallModal = function () {
   document.getElementById("editCallModal").style.display = "none";
   _editCallId = null;
 };
-
 window.closeEditCallIfOutside = function (e) {
   if (e.target === document.getElementById("editCallModal")) window.closeEditCallModal();
 };
@@ -375,13 +486,10 @@ window.saveEditCall = async function () {
   const contactName = document.getElementById("editCallContactName").value.trim();
   const assignedTo  = document.getElementById("editCallAssignTo").value;
   const dateVal     = document.getElementById("editCallDate").value;
-
   if (!contactName) { showToast("Enter contact name", "error"); return; }
   if (!dateVal)     { showToast("Pick a date", "error"); return; }
-
   const btn = document.getElementById("saveEditCallBtn");
   btn.textContent = "Saving…"; btn.disabled = true;
-
   try {
     await updateDoc(doc(db, CALLS_COL, _editCallId), {
       contactName,
@@ -396,15 +504,13 @@ window.saveEditCall = async function () {
     });
     showToast("Updated ✓", "success");
     window.closeEditCallModal();
-  } catch (e) {
-    showToast("Error: " + e.message, "error");
-  }
+  } catch (e) { showToast("Error: " + e.message, "error"); }
   btn.textContent = "Save Changes"; btn.disabled = false;
 };
 
-// ══════════════════════════════════════════════════════════════════════════
-// DELETE CALL  (admin only)
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// DELETE
+// ═══════════════════════════════════════════════════════════════════════════
 let _delCallId = null;
 
 window.openDeleteCallModal = function (id) {
@@ -412,45 +518,38 @@ window.openDeleteCallModal = function (id) {
   _delCallId = id;
   document.getElementById("deleteCallModal").style.display = "flex";
 };
-
 window.closeDeleteCallModal = function () {
   document.getElementById("deleteCallModal").style.display = "none";
   _delCallId = null;
 };
-
 window.confirmDeleteCall = async function () {
   if (!_delCallId) return;
   try {
     await deleteDoc(doc(db, CALLS_COL, _delCallId));
     showToast("Deleted", "");
     window.closeDeleteCallModal();
-  } catch (e) {
-    showToast("Error", "error");
-  }
+  } catch (e) { showToast("Error", "error"); }
 };
 
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // TOGGLE DONE
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 window.toggleCallDone = async function (id, markDone) {
   try {
     await updateDoc(doc(db, CALLS_COL, id), {
       status     : markDone ? "done" : "pending",
       completedAt: markDone ? Timestamp.now() : null,
-      completedBy: markDone ? _currentUser : null,
+      completedBy: markDone ? _currentUser    : null,
     });
     showToast(markDone ? "Call marked done ✓" : "Reopened", markDone ? "success" : "");
-  } catch (e) {
-    showToast("Error", "error");
-  }
+  } catch (e) { showToast("Error", "error"); }
 };
 
-// ── Populate staff dropdowns ───────────────────────────────────────────────
+// ── Staff dropdown helper ──────────────────────────────────────────────────
 function _populateCallStaffSelect(selId, selected = null) {
   const sel = document.getElementById(selId);
   if (!sel) return;
   const autoSelect = selected || _currentUser;
-  // Use _allStaff if available, otherwise build a minimal fallback
   const staff = _allStaff.length ? _allStaff : [_currentUser].filter(Boolean);
   sel.innerHTML = staff.map(s =>
     `<option value="${s}" ${s === autoSelect ? "selected" : ""}>${s}</option>`

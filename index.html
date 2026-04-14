@@ -279,6 +279,10 @@
   <div class="modal-sheet calls-modal-sheet">
     <div class="modal-handle"></div>
     <div class="modal-title">📞 Schedule a Call</div>
+    <!-- Contact picker row — shown only on Android Chrome, hidden elsewhere -->
+    <button id="contactPickerBtn" class="contact-picker-btn" onclick="window.pickContact()" style="display:none">
+      👤 Pick from Contacts
+    </button>
     <label class="calls-label">Contact Name *</label>
     <input id="callContactName" class="modal-input" placeholder="Patient / Vendor / Hospital…"/>
     <label class="calls-label">Phone Number</label>
@@ -330,6 +334,9 @@
   <div class="modal-sheet calls-modal-sheet">
     <div class="modal-handle"></div>
     <div class="modal-title">✏️ Edit Call Reminder</div>
+    <button id="contactPickerBtnEdit" class="contact-picker-btn" onclick="window.pickContactEdit()" style="display:none">
+      👤 Pick from Contacts
+    </button>
     <label class="calls-label">Contact Name *</label>
     <input id="editCallContactName" class="modal-input" placeholder="Contact name"/>
     <label class="calls-label">Phone Number</label>
