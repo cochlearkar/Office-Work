@@ -284,9 +284,9 @@
       👤 Pick from Contacts
     </button>
     <label class="calls-label">Contact Name *</label>
-    <input id="callContactName" class="modal-input" placeholder="Patient / Vendor / Hospital…" autocomplete="name"/>
+    <input id="callContactName" class="modal-input" placeholder="Patient / Vendor / Hospital…"/>
     <label class="calls-label">Phone Number</label>
-    <input id="callContactPhone" class="modal-input" placeholder="+91 98765 43210" type="tel" autocomplete="tel"/>
+    <input id="callContactPhone" class="modal-input" placeholder="+91 98765 43210" type="tel"/>
     <label class="calls-label">Purpose / Reason</label>
     <input id="callPurpose" class="modal-input" placeholder="e.g. Follow-up on report, Appointment confirm…"/>
     <div class="modal-row" style="gap:8px;margin-bottom:10px">
@@ -338,9 +338,9 @@
       👤 Pick from Contacts
     </button>
     <label class="calls-label">Contact Name *</label>
-    <input id="editCallContactName" class="modal-input" placeholder="Contact name" autocomplete="name"/>
+    <input id="editCallContactName" class="modal-input" placeholder="Contact name"/>
     <label class="calls-label">Phone Number</label>
-    <input id="editCallContactPhone" class="modal-input" placeholder="+91 98765 43210" type="tel" autocomplete="tel"/>
+    <input id="editCallContactPhone" class="modal-input" placeholder="+91 98765 43210" type="tel"/>
     <label class="calls-label">Purpose / Reason</label>
     <input id="editCallPurpose" class="modal-input" placeholder="Purpose…"/>
     <div class="modal-row" style="gap:8px;margin-bottom:10px">
@@ -448,5 +448,146 @@
   </div>
 </div>
 
+
+<!-- ── ADD MEETING MODAL ──────────────────────────────── -->
+<div class="modal-overlay" id="addMeetingModal" style="display:none" onclick="closeAddMeetingIfOutside(event)">
+  <div class="modal-sheet calls-modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🤝 Schedule a Meeting</div>
+    <label class="calls-label">Meeting Title *</label>
+    <input id="mtgTitle" class="modal-input" placeholder="e.g. Vendor Review, Staff Sync…"/>
+    <label class="calls-label">Type</label>
+    <select id="mtgType" class="mini-select" style="width:100%;margin-bottom:12px">
+      <option value="staff">👥 Staff / Team</option>
+      <option value="vendor">🤝 Vendor</option>
+      <option value="hospital">🏥 Hospital</option>
+      <option value="external">🌐 External</option>
+    </select>
+    <div class="modal-row" style="gap:8px;margin-bottom:10px">
+      <div style="flex:1">
+        <label class="calls-label">Date *</label>
+        <input id="mtgDate" class="modal-input" type="date" style="margin-bottom:0"/>
+      </div>
+      <div style="flex:1">
+        <label class="calls-label">Time (optional)</label>
+        <input id="mtgTime" class="modal-input" type="time" style="margin-bottom:0"/>
+      </div>
+    </div>
+    <label class="calls-label">Location / Link</label>
+    <input id="mtgLocation" class="modal-input" placeholder="Room, address or meeting link…"/>
+    <label class="calls-label">Staff Attendees</label>
+    <div id="mtgStaffChecks" class="mtg-staff-checks"></div>
+    <label class="calls-label" style="margin-top:10px">External Attendees</label>
+    <div id="mtgExternalList"></div>
+    <button class="mtg-add-ext-btn" onclick="window.addMeetingExternalRow()">＋ Add External Person</button>
+    <label class="calls-label" style="margin-top:10px">Notes (optional)</label>
+    <textarea id="mtgNotes" class="modal-input calls-textarea" rows="2" placeholder="Agenda, context…"></textarea>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="modal-cancel" onclick="closeAddMeetingModal()">Cancel</button>
+      <button class="modal-save" onclick="saveAddMeeting()" id="saveMeetingBtn">Schedule</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── EDIT MEETING MODAL ─────────────────────────────── -->
+<div class="modal-overlay" id="editMeetingModal" style="display:none" onclick="closeEditMeetingIfOutside(event)">
+  <div class="modal-sheet calls-modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✏️ Edit Meeting</div>
+    <label class="calls-label">Meeting Title *</label>
+    <input id="editMtgTitle" class="modal-input" placeholder="Meeting title…"/>
+    <label class="calls-label">Type</label>
+    <select id="editMtgType" class="mini-select" style="width:100%;margin-bottom:12px">
+      <option value="staff">👥 Staff / Team</option>
+      <option value="vendor">🤝 Vendor</option>
+      <option value="hospital">🏥 Hospital</option>
+      <option value="external">🌐 External</option>
+    </select>
+    <div class="modal-row" style="gap:8px;margin-bottom:10px">
+      <div style="flex:1">
+        <label class="calls-label">Date *</label>
+        <input id="editMtgDate" class="modal-input" type="date" style="margin-bottom:0"/>
+      </div>
+      <div style="flex:1">
+        <label class="calls-label">Time</label>
+        <input id="editMtgTime" class="modal-input" type="time" style="margin-bottom:0"/>
+      </div>
+    </div>
+    <label class="calls-label">Location / Link</label>
+    <input id="editMtgLocation" class="modal-input" placeholder="Room, address or meeting link…"/>
+    <label class="calls-label">Staff Attendees</label>
+    <div id="editMtgStaffChecks" class="mtg-staff-checks"></div>
+    <label class="calls-label" style="margin-top:10px">External Attendees</label>
+    <div id="editMtgExternalList"></div>
+    <button class="mtg-add-ext-btn" onclick="window.addEditMeetingExternalRow()">＋ Add External Person</button>
+    <label class="calls-label" style="margin-top:10px">Notes</label>
+    <textarea id="editMtgNotes" class="modal-input calls-textarea" rows="2" placeholder="Agenda, context…"></textarea>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="modal-cancel" onclick="closeEditMeetingModal()">Cancel</button>
+      <button class="modal-save" onclick="saveEditMeeting()" id="saveEditMeetingBtn">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADD GROUP CALL SESSION MODAL ──────────────────── -->
+<div class="modal-overlay" id="addGroupCallModal" style="display:none" onclick="closeAddGroupCallIfOutside(event)">
+  <div class="modal-sheet calls-modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">👥 New Group Call Session</div>
+    <label class="calls-label">Session Title *</label>
+    <input id="gcTitle" class="modal-input" placeholder="e.g. Vendor Coordination, Follow-up Round…"/>
+    <label class="calls-label">Purpose / Notes</label>
+    <input id="gcPurpose" class="modal-input" placeholder="What's this call session about?"/>
+    <div class="modal-row" style="gap:8px;margin-bottom:10px">
+      <div style="flex:1">
+        <label class="calls-label">Date *</label>
+        <input id="gcDate" class="modal-input" type="date" style="margin-bottom:0"/>
+      </div>
+      <div style="flex:1">
+        <label class="calls-label">Time (optional)</label>
+        <input id="gcTime" class="modal-input" type="time" style="margin-bottom:0"/>
+      </div>
+    </div>
+    <label class="calls-label">Contacts to Call</label>
+    <div class="gcc-form-hint">Add each person you need to call. Tick them off as you call.</div>
+    <div id="gcContactsList"></div>
+    <button class="mtg-add-ext-btn" onclick="window.addGCContactRow()">＋ Add Contact</button>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="modal-cancel" onclick="closeAddGroupCallModal()">Cancel</button>
+      <button class="modal-save" onclick="saveAddGroupCall()" id="saveGroupCallBtn">Save Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── EDIT GROUP CALL SESSION MODAL ─────────────────── -->
+<div class="modal-overlay" id="editGroupCallModal" style="display:none" onclick="closeEditGroupCallIfOutside(event)">
+  <div class="modal-sheet calls-modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✏️ Edit Group Call Session</div>
+    <label class="calls-label">Session Title *</label>
+    <input id="editGcTitle" class="modal-input" placeholder="Session title…"/>
+    <label class="calls-label">Purpose / Notes</label>
+    <input id="editGcPurpose" class="modal-input" placeholder="Purpose…"/>
+    <div class="modal-row" style="gap:8px;margin-bottom:10px">
+      <div style="flex:1">
+        <label class="calls-label">Date *</label>
+        <input id="editGcDate" class="modal-input" type="date" style="margin-bottom:0"/>
+      </div>
+      <div style="flex:1">
+        <label class="calls-label">Time</label>
+        <input id="editGcTime" class="modal-input" type="time" style="margin-bottom:0"/>
+      </div>
+    </div>
+    <label class="calls-label">Contacts</label>
+    <div id="editGcContactsList"></div>
+    <button class="mtg-add-ext-btn" onclick="window.addEditGCContactRow()">＋ Add Contact</button>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="modal-cancel" onclick="closeEditGroupCallModal()">Cancel</button>
+      <button class="modal-save" onclick="saveEditGroupCall()" id="saveEditGroupCallBtn">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="meetings.js"></script>
 </body>
 </html>

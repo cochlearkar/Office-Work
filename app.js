@@ -5,6 +5,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initDrive, renderDocsPanel } from "./docs.js";
 import { initCalls, switchToCallsTab, hideCallsPanel } from "./calls.js";
+import {
+  initMeetings, startMeetingsListener, stopMeetingsListener,
+  getMeetingsForDate, getMeetingsSummary, injectMeetingsIntoCalendar,
+  meetingCard, startGroupCallsListener, stopGroupCallsListener,
+  getGroupCallsCache, groupCallCard
+} from "./meetings.js";
 
 // ── Expose calls tab switcher globally for onclick in HTML ──────────────────
 window.switchToCallsTabGlobal = switchToCallsTab;
@@ -211,10 +217,38 @@ function loginAs(name) {
 
   // ── Init Call Reminders module ────────────────────────────────────────────
   initCalls(currentUser, isAdmin, allStaff, avatarColors);
+
+  // ── Init Meetings module ─────────────────────────────────────────────────
+  initMeetings(currentUser, isAdmin, allStaff, avatarColors);
+
+  // Expose meetings module to calls panel via global bridge
+  window._meetingsModule = { getGroupCallsCache, groupCallCard };
+
+  // Start listeners — they stay live while user is logged in
+  startMeetingsListener(() => {
+    // Re-render calendar if it's currently showing events pane
+    if (calView && typeof window.renderCalendarPanel === "function") {
+      window.renderCalendarPanel();
+    }
+  });
+  startGroupCallsListener(() => {
+    // Re-render calls panel if open (trigger via existing mechanism)
+    const callsPanel = document.getElementById("callsPanel");
+    if (callsPanel && callsPanel.style.display !== "none") {
+      // The calls panel re-renders itself via its own onSnapshot;
+      // this forces a re-render to pick up group call changes
+      if (typeof window._triggerCallsPanelRefresh === "function") {
+        window._triggerCallsPanelRefresh();
+      }
+    }
+  });
 }
 
 window.logout = function() {
   if (taskListUnsub)  { taskListUnsub();  taskListUnsub  = null; }
+  stopMeetingsListener();
+  stopGroupCallsListener();
+  window._meetingsModule = null;
   if (activeChatUnsub){ activeChatUnsub(); activeChatUnsub = null; }
   messageCountUnsubs.forEach(fn => fn());
   messageCountUnsubs = [];
@@ -1354,6 +1388,7 @@ window.renderCalendarPanel = async function() {
     try {
       const text = await fetchICS();
       buildCalendarHTML(panel.querySelector('#calEventsPane'), parseICS(text));
+      injectMeetingsIntoCalendar(panel.querySelector('#calEventsPane'));
     } catch(e) {
       panel.querySelector('#calEventsPane').innerHTML =
         `<div class="cal-state cal-error">
@@ -1639,7 +1674,7 @@ function buildCalendarHTML(pane, events) {
       const isToday = key === todayKey;
       const isTmrw  = key === tmrwKey;
       const daysAhead = Math.round((g.date - now) / 86400000);
-      html += `<div class="cal-day${isToday?' cal-day-today':''}">
+      html += `<div class="cal-day${isToday?' cal-day-today':''}" data-date-key="${key}">
         <div class="cal-day-lbl" style="display:flex;align-items:center;justify-content:space-between">
           <span>${isToday?'📍 Today — ':isTmrw?'⏭ Tomorrow — ':''}${g.label}</span>
           <button class="cal-add-day-btn" onclick="openFabModalForDate(${daysAhead})">＋ Task</button>
