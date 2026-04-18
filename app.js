@@ -626,7 +626,8 @@ function _fmt12(slot) {
 
 // ── STAFF VIEW ─────────────────────────────────────
 function renderStaffView() {
-  dashboard.innerHTML = buildForecastBanner() + buildTop3Urgent() + buildMyAppointments();
+  // Staff only see their own appointment banner — no forecast or office-wide urgent panel
+  dashboard.innerHTML = buildMyAppointments();
 
   const myTasks = allTasks.filter(t => t.assignedTo === currentUser);
   const pending = myTasks.filter(t => t.status !== "completed");
@@ -1901,6 +1902,7 @@ function startHighAlertListener() {
     if (!pending.length) {
       document.getElementById("highAlertOverlay").style.display = "none";
       document.body.style.overflow = "";
+      _lockNavForAlert(false);
       activeHighAlertId = null;
       return;
     }
@@ -1941,8 +1943,51 @@ function showHighAlertOverlay(data) {
     : `📅 Due in ${diff} day${diff!==1?"s":""}`;
 
   overlay.style.display = "block";
-  // Prevent scroll of page behind
+  // Hard lock — prevent ANY interaction with the app behind
   document.body.style.overflow = "hidden";
+
+  // Block all bottom nav and FAB clicks while alert is active
+  _lockNavForAlert(true);
+}
+
+function _lockNavForAlert(lock) {
+  // Bottom nav buttons
+  ["bnavHome","bnavCalendar","bnavDocs","bnavCalls"].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (lock) {
+      el.setAttribute("data-alert-locked","1");
+      el._origOnclick = el.onclick;
+      el.onclick = function(e) { e.stopPropagation(); _flashAlertOverlay(); return false; };
+    } else {
+      if (el.getAttribute("data-alert-locked")) {
+        el.onclick = el._origOnclick || null;
+        el.removeAttribute("data-alert-locked");
+      }
+    }
+  });
+  // FAB button
+  var fab = document.getElementById("fabAddBtn");
+  if (fab) {
+    if (lock) {
+      fab.setAttribute("data-alert-locked","1");
+      fab._origOnclick = fab.onclick;
+      fab.onclick = function(e) { e.stopPropagation(); _flashAlertOverlay(); return false; };
+    } else {
+      if (fab.getAttribute("data-alert-locked")) {
+        fab.onclick = fab._origOnclick || null;
+        fab.removeAttribute("data-alert-locked");
+      }
+    }
+  }
+}
+
+function _flashAlertOverlay() {
+  var overlay = document.getElementById("highAlertOverlay");
+  if (!overlay) return;
+  overlay.style.transition = "opacity 0.08s";
+  overlay.style.opacity = "0.7";
+  setTimeout(function() { overlay.style.opacity = "1"; overlay.style.transition = ""; }, 150);
 }
 
 // ── Staff: acknowledge the alert ──────────────────────────────────────────────
@@ -1954,8 +1999,9 @@ window.acknowledgeHighAlert = async function() {
     await updateDoc(doc(db, "highAlerts", activeHighAlertId), { acknowledged: true });
     document.getElementById("highAlertOverlay").style.display = "none";
     document.body.style.overflow = "";
+    _lockNavForAlert(false);
     activeHighAlertId = null;
-    showToast("Got it! Task added to your list 💪", "success");
+    showToast("Got it! Task added to your list", "success");
   } catch(e) {
     showToast("Error — try again", "error");
     btn.textContent = "✅ I Understand — Start Now";
