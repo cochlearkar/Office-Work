@@ -605,12 +605,12 @@
         <div id="haDue" style="display:inline-block;background:#fef2f2;color:#dc2626;font-size:12px;font-weight:800;padding:5px 12px;border-radius:20px;"></div>
       </div>
 
-      <!-- Acknowledge button -->
-      <button id="haAckBtn" onclick="window.acknowledgeHighAlert()"
-        style="width:100%;padding:16px;background:#fff;color:#7f1d1d;border:none;border-radius:16px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.02em;">
-        ✅ I Understand — Start Now
-      </button>
-      <div style="text-align:center;color:rgba(255,255,255,.45);font-size:11px;font-weight:600;margin-top:10px;">This screen will clear once you acknowledge</div>
+      <!-- Waiting message — only admin can release by marking task done -->
+      <div style="width:100%;padding:16px;background:rgba(255,255,255,0.15);color:#fff;border:2px solid rgba(255,255,255,0.3);border-radius:16px;font-size:14px;font-weight:700;text-align:center;line-height:1.5;">
+        ⏳ Waiting for admin to mark this complete<br>
+        <span style="font-size:12px;font-weight:500;opacity:0.8;">This screen will unlock automatically</span>
+      </div>
+      <div style="text-align:center;color:rgba(255,255,255,.45);font-size:11px;font-weight:600;margin-top:10px;">You cannot access the app until this task is resolved</div>
     </div>
   </div>
 </div>
@@ -642,8 +642,9 @@
     <div class="modal-actions">
       <button class="modal-cancel" onclick="closeHighAlertModal()">Cancel</button>
       <button class="modal-save" onclick="window.sendHighAlert()"
-        style="background:#dc2626;border-color:#dc2626;" id="haSendBtn">🚨 Send Alert</button>
+        style="background:#dc2626;border-color:#dc2626;" id="haSendBtn">Send Alert</button>
     </div>
+    <div id="haErrorMsg" style="display:none;margin-top:10px;background:#fef2f2;color:#991b1b;font-size:12px;font-weight:600;padding:10px 12px;border-radius:8px;word-break:break-word;line-height:1.5;"></div>
   </div>
 </div>
 
