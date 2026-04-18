@@ -634,18 +634,21 @@ function renderStaffView() {
   const todayT  = pending.filter(t => diffDays(t) === 0);
   const done    = myTasks.filter(t => t.status === "completed");
 
+  const urgentCount    = pending.filter(t => t.priority === "p1").length;
+  const highAlertCount = pending.filter(t => t.isHighAlert).length;
   document.getElementById("staffStripInner").innerHTML = `
-    <div class="sstrip-pill sp-pending">
-      <div class="snum">${pending.length}</div><div class="slbl">Pending</div>
-    </div>
-    ${overdue.length ? `<div class="sstrip-pill" style="background:var(--red-l)">
-      <div class="snum" style="color:var(--red)">${overdue.length}</div>
-      <div class="slbl" style="color:#b91c1c">Overdue</div></div>` : ""}
-    ${todayT.length ? `<div class="sstrip-pill" style="background:var(--amber-l)">
+    <div class="sstrip-pill" style="background:var(--amber-l)">
       <div class="snum" style="color:var(--amber)">${todayT.length}</div>
-      <div class="slbl" style="color:#92400e">Due Today</div></div>` : ""}
+      <div class="slbl" style="color:#92400e">Today</div>
+    </div>
+    ${urgentCount ? `<div class="sstrip-pill" style="background:var(--red-l)">
+      <div class="snum" style="color:var(--red)">${urgentCount}</div>
+      <div class="slbl" style="color:#b91c1c">Urgent</div></div>` : ""}
+    ${highAlertCount ? `<div class="sstrip-pill" style="background:#faf5ff">
+      <div class="snum" style="color:#7c3aed">${highAlertCount}</div>
+      <div class="slbl" style="color:#6d28d9">Alert</div></div>` : ""}
     <div class="sstrip-pill sp-done">
-      <div class="snum">${done.length}</div><div class="slbl">Done</div>
+      <div class="snum">${done.filter(t => diffDays(t) === 0).length}</div><div class="slbl">Done</div>
     </div>`;
 
   if (!pending.length && !done.length) {
@@ -663,22 +666,39 @@ function renderStaffView() {
     const colors = {p1:"var(--c-u)", p2:"var(--c-h)", p3:"var(--c-n)", p4:"var(--c-l)"};
     return `<span class="mts-pri-dot" style="background:${colors[t.priority||'p4']}"></span>`;
   };
+
+  // Staff see: today's tasks + urgent (p1) across any date + admin high alert tasks
+  // Future/upcoming tasks are hidden to keep focus on what matters now
+  const todaySorted = [...pending.filter(t => diffDays(t) === 0)]
+    .sort((a,b) => {
+      if(a.slot && b.slot) return a.slot.localeCompare(b.slot);
+      if(a.slot) return -1; if(b.slot) return 1;
+      return ({p1:1,p2:2,p3:3,p4:4}[a.priority||'p4']) - ({p1:1,p2:2,p3:3,p4:4}[b.priority||'p4']);
+    });
+
+  // Urgent = p1, not due today (today already shown above), not completed
+  const urgentSorted = sortByPriority(
+    pending.filter(t => t.priority === "p1" && diffDays(t) !== 0)
+  );
+
+  // High alert tasks assigned by admin (any due date, not completed)
+  const highAlertSorted = sortByPriority(
+    pending.filter(t => t.isHighAlert && t.priority !== "p1" && diffDays(t) !== 0)
+  );
+
   const sections = [
-    { key:"overdue",   icon:"⚠️",  label:"Overdue",          accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
-      tasks: [...pending.filter(t=>diffDays(t)<0)].sort((a,b)=>{if(a.slot&&b.slot)return a.slot.localeCompare(b.slot);if(a.slot)return -1;if(b.slot)return 1;return({p1:1,p2:2,p3:3,p4:4}[a.priority||'p4'])-({p1:1,p2:2,p3:3,p4:4}[b.priority||'p4']);}),
-      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}${t.slot?'<br><span class="mts-time-chip">&#128336; '+_fmt12(t.slot)+'</span>':''}</div><div class="mts-overdue-bubble">${Math.abs(diffDays(t))}d</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
-    { key:"today",     icon:"📋",  label:"Today's Tasks",    accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
-      tasks: [...pending.filter(t=>diffDays(t)===0)].sort((a,b)=>{if(a.slot&&b.slot)return a.slot.localeCompare(b.slot);if(a.slot)return -1;if(b.slot)return 1;return({p1:1,p2:2,p3:3,p4:4}[a.priority||'p4'])-({p1:1,p2:2,p3:3,p4:4}[b.priority||'p4']);}),
+    { key:"today", icon:"📋", label:"Today's Tasks", accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
+      tasks: todaySorted,
       rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}${t.slot?'<br><span class="mts-time-chip">&#128336; '+_fmt12(t.slot)+'</span>':''}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
-    { key:"tomorrow",  icon:"📅",  label:"Tomorrow's Tasks", accent:"#0ea5e9", bg:"#f0f9ff", border:"#bae6fd",
-      tasks: [...pending.filter(t=>diffDays(t)===1)].sort((a,b)=>{if(a.slot&&b.slot)return a.slot.localeCompare(b.slot);if(a.slot)return -1;if(b.slot)return 1;return({p1:1,p2:2,p3:3,p4:4}[a.priority||'p4'])-({p1:1,p2:2,p3:3,p4:4}[b.priority||'p4']);}),
-      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}${t.slot?'<br><span class="mts-time-chip">&#128336; '+_fmt12(t.slot)+'</span>':''}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
-    { key:"upcoming",  icon:"🗓",  label:"Upcoming",         accent:"#059669", bg:"#f0fdf4", border:"#bbf7d0",
-      tasks: sortByPriority(pending.filter(t => diffDays(t) > 1)),
-      rowFn: t => `<div class="mts-row mts-row-up">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge mts-badge-up">${safeDate(t.dueDate).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
-    { key:"completed", icon:"✅",  label:"Completed",        accent:"#94a3b8", bg:"#f8fafc", border:"#e2e8f0",
-      tasks: done,
-      rowFn: t => `<div class="mts-row mts-row-done"><div class="mts-title mts-done-title">${t.title}</div><div class="mts-badge mts-badge-done">✓ Done</div></div>` }
+    { key:"overdue", icon:"⚠️", label:"Urgent Priority", accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
+      tasks: urgentSorted,
+      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}${t.slot?'<br><span class="mts-time-chip">&#128336; '+_fmt12(t.slot)+'</span>':''}</div><div class="mts-overdue-bubble">${diffDays(t) < 0 ? Math.abs(diffDays(t))+'d overdue' : 'in '+diffDays(t)+'d'}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+    { key:"upcoming", icon:"🚨", label:"Admin Alert Tasks", accent:"#7c3aed", bg:"#faf5ff", border:"#e9d5ff",
+      tasks: highAlertSorted,
+      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge" style="background:#ede9fe;color:#6d28d9;font-size:11px;font-weight:800;padding:3px 8px;border-radius:12px;">Alert</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+    { key:"completed", icon:"✅", label:"Completed Today", accent:"#94a3b8", bg:"#f8fafc", border:"#e2e8f0",
+      tasks: done.filter(t => diffDays(t) === 0),
+      rowFn: t => `<div class="mts-row mts-row-done"><div class="mts-title mts-done-title">${t.title}</div><div class="mts-badge mts-badge-done">Done</div></div>` }
   ];
 
   sections.forEach(sec => {
@@ -853,8 +873,27 @@ window.toggleTask = async function(id, checked) {
   if(!isAdmin) return;
   try {
     await updateDoc(doc(db,"tasks",id),{status:checked?"completed":"pending"});
-    showToast(checked?"Done! 🎉":"Reopened",checked?"success":"");
+    showToast(checked?"Done! ":"Reopened",checked?"success":"");
     await loadTasks(true);
+
+    // If this is a high alert task being marked done, auto-acknowledge the alert
+    // so the staff member's lock screen is released
+    if (checked) {
+      try {
+        const t = allTasks.find(t => t.id === id);
+        if (t && t.isHighAlert && t.assignedTo) {
+          const alertSnap = await getDocs(collection(db, "highAlerts"));
+          alertSnap.docs.forEach(async function(alertDoc) {
+            const d = alertDoc.data();
+            if (d.assignedTo === t.assignedTo && d.title === t.title && d.acknowledged === false) {
+              await updateDoc(doc(db, "highAlerts", alertDoc.id), { acknowledged: true });
+            }
+          });
+        }
+      } catch(alertErr) {
+        console.warn("Could not auto-acknowledge high alert:", alertErr.message);
+      }
+    }
 
     if(checked){
       setTimeout(async()=>{
@@ -1774,6 +1813,8 @@ window.openHighAlertModal = function() {
   document.getElementById("haTaskTitle").value = "";
   document.getElementById("haAlertNote").value = "";
   document.getElementById("haDueSel").value = "0";
+  var errDiv = document.getElementById("haErrorMsg");
+  if (errDiv) { errDiv.style.display = "none"; errDiv.textContent = ""; }
   document.getElementById("highAlertModal").style.display = "flex";
   setTimeout(() => document.getElementById("haTaskTitle").focus(), 100);
 };
@@ -1796,33 +1837,50 @@ window.sendHighAlert = async function() {
   const due = new Date(); due.setHours(0,0,0,0); due.setDate(due.getDate() + days);
 
   const btn = document.getElementById("haSendBtn");
-  btn.textContent = "Sending…"; btn.disabled = true;
+  btn.textContent = "Sending..."; btn.disabled = true;
 
   try {
-    // Also create a real task so it shows in the task list after acknowledgement
-    await addDoc(collection(db, "tasks"), {
-      title, assignedTo,
-      department: Object.entries(employeesMap).find(([,arr]) => arr.includes(assignedTo))?.[0] || "child",
-      dueDate: due, priority: "p1", repeat: "none",
-      status: "pending", createdAt: new Date(),
-      isHighAlert: true
-    });
-
-    // Write the alert record
+    // Step 1: write the alert (this is what locks the screen)
     await addDoc(collection(db, "highAlerts"), {
-      assignedTo, title, note, dueDate: due,
-      pushedAt: new Date(), pushedBy: ADMIN,
+      assignedTo: assignedTo,
+      title: title,
+      note: note || "",
+      dueDate: due,
+      pushedAt: new Date(),
+      pushedBy: ADMIN,
       acknowledged: false
     });
 
+    // Step 2: also create a real p1 task so it appears in the task list
+    try {
+      const dept = Object.entries(employeesMap).find(function(e){ return e[1].includes(assignedTo); });
+      await addDoc(collection(db, "tasks"), {
+        title: title,
+        assignedTo: assignedTo,
+        department: dept ? dept[0] : "child",
+        dueDate: due,
+        priority: "p1",
+        repeat: "none",
+        status: "pending",
+        createdAt: new Date(),
+        isHighAlert: true
+      });
+    } catch(taskErr) {
+      console.warn("Task write failed (alert still sent):", taskErr.message);
+    }
+
     closeHighAlertModal();
-    showToast(`🚨 Alert sent to ${assignedTo}`, "success");
+    showToast("Alert sent to " + assignedTo, "success");
     await loadTasks(true);
   } catch(e) {
-    showToast("Error sending alert", "error");
-    console.error(e);
+    var msg = (e && e.message) ? e.message : String(e);
+    // Show the real error inside the modal so you can read it
+    var errDiv = document.getElementById("haErrorMsg");
+    if (errDiv) { errDiv.textContent = "Error: " + msg; errDiv.style.display = "block"; }
+    showToast("Failed - see modal for details", "error");
+    console.error("sendHighAlert:", e);
   }
-  btn.textContent = "🚨 Send Alert"; btn.disabled = false;
+  btn.textContent = "Send Alert"; btn.disabled = false;
 };
 
 // ── Staff: listen for unacknowledged alerts addressed to them ─────────────────
