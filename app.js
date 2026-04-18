@@ -1772,7 +1772,7 @@ window.openHighAlertModal = function() {
   const staff = allStaff.filter(s => s !== ADMIN);
   sel.innerHTML = staff.map(s => `<option value="${s}">${s}</option>`).join("");
   document.getElementById("haTaskTitle").value = "";
-  document.getElementById("haNote").value = "";
+  document.getElementById("haAlertNote").value = "";
   document.getElementById("haDueSel").value = "0";
   document.getElementById("highAlertModal").style.display = "flex";
   setTimeout(() => document.getElementById("haTaskTitle").focus(), 100);
@@ -1787,7 +1787,7 @@ window.sendHighAlert = async function() {
   if (!isAdmin) return;
   const assignedTo = document.getElementById("haAssignTo").value;
   const title      = document.getElementById("haTaskTitle").value.trim();
-  const note       = document.getElementById("haNote").value.trim();
+  const note       = document.getElementById("haAlertNote").value.trim();
   const days       = parseInt(document.getElementById("haDueSel").value) || 0;
 
   if (!title)      { showToast("Enter an alert message", "error"); return; }
@@ -1830,21 +1830,24 @@ function startHighAlertListener() {
   if (isAdmin) return; // admin never receives lockscreen
   if (highAlertUnsub) { highAlertUnsub(); highAlertUnsub = null; }
 
+  // Single where clause only — avoids needing a composite Firestore index.
+  // Filter acknowledged=false in JS.
   const q = query(
     collection(db, "highAlerts"),
-    where("assignedTo",    "==", currentUser),
-    where("acknowledged",  "==", false)
+    where("assignedTo", "==", currentUser)
   );
 
   highAlertUnsub = onSnapshot(q, snap => {
-    if (snap.empty) {
-      // No pending alerts — hide overlay if it was showing
+    // Filter unacknowledged in JS
+    const pending = snap.docs.filter(d => d.data().acknowledged === false);
+    if (!pending.length) {
       document.getElementById("highAlertOverlay").style.display = "none";
+      document.body.style.overflow = "";
       activeHighAlertId = null;
       return;
     }
     // Show the most recently pushed unacknowledged alert
-    const alertDoc = snap.docs.sort((a, b) => {
+    const alertDoc = pending.sort((a, b) => {
       const ta = a.data().pushedAt?.toDate?.() ?? new Date(0);
       const tb = b.data().pushedAt?.toDate?.() ?? new Date(0);
       return tb - ta;
@@ -1860,7 +1863,7 @@ function startHighAlertListener() {
 function showHighAlertOverlay(data) {
   const overlay  = document.getElementById("highAlertOverlay");
   const titleEl  = document.getElementById("haTitle");
-  const noteEl   = document.getElementById("haNote");
+  const noteEl   = document.getElementById("haAlertNoteDisplay");
   const dueEl    = document.getElementById("haDue");
 
   titleEl.textContent = data.title || "Urgent task assigned";
