@@ -17,5 +17,10 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // High Alerts — admin-pushed urgent alerts that lock the recipient's screen
+    match /highAlerts/{alertId} {
+      allow read, write: if true;
+    }
+
   }
 }

@@ -1,7 +1,7 @@
 import { db } from "./firebase.js";
 import {
   collection, addDoc, getDocs, updateDoc, deleteDoc, doc,
-  onSnapshot, query, orderBy
+  onSnapshot, query, orderBy, where
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initDrive, renderDocsPanel } from "./docs.js";
 import { initCalls, switchToCallsTab, hideCallsPanel } from "./calls.js";
@@ -53,6 +53,8 @@ let messageCounts = {};     // taskId -> count (for badges)
 let activeChatUnsub = null;
 let messageCountUnsubs = [];
 let taskListUnsub = null;   // onSnapshot listener for tasks
+let highAlertUnsub = null;  // onSnapshot listener for high alerts
+let activeHighAlertId = null; // currently shown alert id
 
 // ── DOM ────────────────────────────────────────────
 const loginScreen  = document.getElementById("loginScreen");
@@ -176,6 +178,7 @@ function loginAs(name) {
   document.getElementById("adminControls").style.display = isAdmin ? "block" : "none";
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
+  document.getElementById("highAlertBtn").style.display  = isAdmin ? "grid"  : "none";
   setHomeCalendarVisibility(true);
 
   // Show bottom nav + FAB for everyone
@@ -218,6 +221,9 @@ function loginAs(name) {
   // ── Init Call Reminders module ────────────────────────────────────────────
   initCalls(currentUser, isAdmin, allStaff, avatarColors);
 
+  // ── Start High Alert listener (staff only — watches for alerts addressed to them) ──
+  startHighAlertListener();
+
   // ── Init Meetings module ─────────────────────────────────────────────────
   initMeetings(currentUser, isAdmin, allStaff, avatarColors);
 
@@ -246,6 +252,9 @@ function loginAs(name) {
 
 window.logout = function() {
   if (taskListUnsub)  { taskListUnsub();  taskListUnsub  = null; }
+  if (highAlertUnsub) { highAlertUnsub(); highAlertUnsub = null; }
+  activeHighAlertId = null;
+  document.getElementById("highAlertOverlay").style.display = "none";
   stopMeetingsListener();
   stopGroupCallsListener();
   window._meetingsModule = null;
@@ -1752,8 +1761,146 @@ function _parseDate(v) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// LOGIN SCREEN CALENDAR PREVIEW (read-only, no task scheduling)
+// HIGH ALERT SYSTEM
+// Admin pushes a high alert → recipient's screen locks until they acknowledge.
 // ══════════════════════════════════════════════════════════════════════════════
+
+// ── Admin: open the push-alert modal ──────────────────────────────────────────
+window.openHighAlertModal = function() {
+  if (!isAdmin) return;
+  const sel = document.getElementById("haAssignTo");
+  const staff = allStaff.filter(s => s !== ADMIN);
+  sel.innerHTML = staff.map(s => `<option value="${s}">${s}</option>`).join("");
+  document.getElementById("haTaskTitle").value = "";
+  document.getElementById("haNote").value = "";
+  document.getElementById("haDueSel").value = "0";
+  document.getElementById("highAlertModal").style.display = "flex";
+  setTimeout(() => document.getElementById("haTaskTitle").focus(), 100);
+};
+
+window.closeHighAlertModal = function() {
+  document.getElementById("highAlertModal").style.display = "none";
+};
+
+// ── Admin: send the alert to Firestore ────────────────────────────────────────
+window.sendHighAlert = async function() {
+  if (!isAdmin) return;
+  const assignedTo = document.getElementById("haAssignTo").value;
+  const title      = document.getElementById("haTaskTitle").value.trim();
+  const note       = document.getElementById("haNote").value.trim();
+  const days       = parseInt(document.getElementById("haDueSel").value) || 0;
+
+  if (!title)      { showToast("Enter an alert message", "error"); return; }
+  if (!assignedTo) { showToast("Select a staff member",  "error"); return; }
+
+  const due = new Date(); due.setHours(0,0,0,0); due.setDate(due.getDate() + days);
+
+  const btn = document.getElementById("haSendBtn");
+  btn.textContent = "Sending…"; btn.disabled = true;
+
+  try {
+    // Also create a real task so it shows in the task list after acknowledgement
+    await addDoc(collection(db, "tasks"), {
+      title, assignedTo,
+      department: Object.entries(employeesMap).find(([,arr]) => arr.includes(assignedTo))?.[0] || "child",
+      dueDate: due, priority: "p1", repeat: "none",
+      status: "pending", createdAt: new Date(),
+      isHighAlert: true
+    });
+
+    // Write the alert record
+    await addDoc(collection(db, "highAlerts"), {
+      assignedTo, title, note, dueDate: due,
+      pushedAt: new Date(), pushedBy: ADMIN,
+      acknowledged: false
+    });
+
+    closeHighAlertModal();
+    showToast(`🚨 Alert sent to ${assignedTo}`, "success");
+    await loadTasks(true);
+  } catch(e) {
+    showToast("Error sending alert", "error");
+    console.error(e);
+  }
+  btn.textContent = "🚨 Send Alert"; btn.disabled = false;
+};
+
+// ── Staff: listen for unacknowledged alerts addressed to them ─────────────────
+function startHighAlertListener() {
+  if (isAdmin) return; // admin never receives lockscreen
+  if (highAlertUnsub) { highAlertUnsub(); highAlertUnsub = null; }
+
+  const q = query(
+    collection(db, "highAlerts"),
+    where("assignedTo",    "==", currentUser),
+    where("acknowledged",  "==", false)
+  );
+
+  highAlertUnsub = onSnapshot(q, snap => {
+    if (snap.empty) {
+      // No pending alerts — hide overlay if it was showing
+      document.getElementById("highAlertOverlay").style.display = "none";
+      activeHighAlertId = null;
+      return;
+    }
+    // Show the most recently pushed unacknowledged alert
+    const alertDoc = snap.docs.sort((a, b) => {
+      const ta = a.data().pushedAt?.toDate?.() ?? new Date(0);
+      const tb = b.data().pushedAt?.toDate?.() ?? new Date(0);
+      return tb - ta;
+    })[0];
+
+    const data = alertDoc.data();
+    activeHighAlertId = alertDoc.id;
+    showHighAlertOverlay(data);
+  }, err => console.error("High alert listener:", err));
+}
+
+// ── Show the lock-screen overlay ──────────────────────────────────────────────
+function showHighAlertOverlay(data) {
+  const overlay  = document.getElementById("highAlertOverlay");
+  const titleEl  = document.getElementById("haTitle");
+  const noteEl   = document.getElementById("haNote");
+  const dueEl    = document.getElementById("haDue");
+
+  titleEl.textContent = data.title || "Urgent task assigned";
+
+  if (data.note) {
+    noteEl.textContent    = data.note;
+    noteEl.style.display  = "block";
+  } else {
+    noteEl.style.display  = "none";
+  }
+
+  const due  = data.dueDate?.toDate?.() ?? new Date();
+  const diff = Math.ceil((due - new Date().setHours(0,0,0,0)) / 86400000);
+  dueEl.textContent = diff < 0
+    ? `⚠ ${Math.abs(diff)} day${Math.abs(diff)!==1?"s":""} overdue`
+    : diff === 0 ? "⏰ Due today"
+    : `📅 Due in ${diff} day${diff!==1?"s":""}`;
+
+  overlay.style.display = "block";
+  // Prevent scroll of page behind
+  document.body.style.overflow = "hidden";
+}
+
+// ── Staff: acknowledge the alert ──────────────────────────────────────────────
+window.acknowledgeHighAlert = async function() {
+  if (!activeHighAlertId) return;
+  const btn = document.getElementById("haAckBtn");
+  btn.textContent = "Marking…"; btn.disabled = true;
+  try {
+    await updateDoc(doc(db, "highAlerts", activeHighAlertId), { acknowledged: true });
+    document.getElementById("highAlertOverlay").style.display = "none";
+    document.body.style.overflow = "";
+    activeHighAlertId = null;
+    showToast("Got it! Task added to your list 💪", "success");
+  } catch(e) {
+    showToast("Error — try again", "error");
+    btn.textContent = "✅ I Understand — Start Now";
+    btn.disabled = false;
+  }
+};
 window.showLoginCalendar = async function(e) {
   e.preventDefault();
   const overlay = document.getElementById("loginCalOverlay");
