@@ -473,13 +473,12 @@ function renderAdminDashboard() {
     dashboard.appendChild(head);
 
     const buckets = bucket(empTasks);
-    const order   = ["overdue","today","tomorrow","upcoming","completed"];
+    const order   = ["overdue","today","tomorrow","upcoming"];
     const secMeta = {
       overdue:{label:"Overdue",dot:"dot-overdue"},
       today:{label:"Today",dot:"dot-today"},
       tomorrow:{label:"Tomorrow",dot:"dot-tomorrow"},
-      upcoming:{label:"Upcoming",dot:"dot-upcoming"},
-      completed:{label:"Done",dot:"dot-done"}
+      upcoming:{label:"Upcoming",dot:"dot-upcoming"}
     };
 
     let anyTask = false;
@@ -1785,19 +1784,41 @@ function parseICS(text) {
     const val    = line.slice(col + 1).trim();
     const key    = rawKey.toUpperCase();
     if (key === "SUMMARY")  ev.title    = val.replace(/\\n/g,"\n").replace(/\\,/g,",").replace(/\\;/g,";");
-    if (key === "DTSTART")  ev.start    = _parseDate(val);
-    if (key === "DTEND")    ev.end      = _parseDate(val);
+    if (key === "DTSTART")  ev.start    = _parseDate(val, line);
+    if (key === "DTEND")    ev.end      = _parseDate(val, line);
     if (key === "LOCATION") ev.location = val.replace(/\\,/g,",");
   });
   return events.filter(e => e.start).sort((a, b) => a.start - b.start);
 }
 
-function _parseDate(v) {
-  v = v.replace("Z", "");
+function _parseDate(v, rawLine) {
+  // If UTC (ends with Z) — parse as UTC so JS auto-converts to device local time
+  if (v.endsWith("Z")) {
+    const s = v.slice(0, -1);
+    return new Date(Date.UTC(
+      +s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8),
+      +s.slice(9,11), +s.slice(11,13), +s.slice(13,15)
+    ));
+  }
+  // All-day date (no time component) — treat as local midnight
   if (v.length === 8)
     return new Date(+v.slice(0,4), +v.slice(4,6)-1, +v.slice(6,8));
-  return new Date(+v.slice(0,4), +v.slice(4,6)-1, +v.slice(6,8),
-                  +v.slice(9,11), +v.slice(11,13), +v.slice(13,15));
+  // Floating / TZID time — detect timezone from the raw ICS property line
+  // e.g. DTSTART;TZID=Asia/Kolkata:20260418T103000
+  var offsetMins = 0; // default: treat as UTC
+  if (rawLine && rawLine.indexOf("Asia/Kolkata") !== -1) {
+    offsetMins = 5*60 + 30; // IST = UTC+5:30
+  } else if (rawLine && rawLine.indexOf("Asia/Colombo") !== -1) {
+    offsetMins = 5*60 + 30;
+  } else if (rawLine && rawLine.indexOf("TZID=") !== -1) {
+    // Unknown named TZ — fall back to device local offset so times stay reasonable
+    offsetMins = -new Date().getTimezoneOffset();
+  }
+  const utcMs = Date.UTC(
+    +v.slice(0,4), +v.slice(4,6)-1, +v.slice(6,8),
+    +v.slice(9,11), +v.slice(11,13), +v.slice(13,15)
+  ) - offsetMins * 60000;
+  return new Date(utcMs);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
