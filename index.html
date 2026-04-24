@@ -46,6 +46,7 @@
       <div class="header-right">
         <!-- admin only -->
         <button class="hdr-btn" id="highAlertBtn" onclick="openHighAlertModal()" title="Push High Alert" style="display:none">🚨</button>
+        <button class="hdr-btn" id="appreciationBtn" onclick="openAppreciationModal()" title="Send Appreciation" style="display:none">⭐</button>
         <button class="hdr-btn" id="exportBtn" onclick="exportTasks()" title="Export" style="display:none">📤</button>
         <button class="hdr-btn logout-btn" onclick="logout()" title="Switch user">⇄</button>
       </div>
@@ -651,6 +652,63 @@
 <style>
 @keyframes haPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.12);} }
 </style>
+
+<!-- ── ROUTINE REWARD OVERLAY (confetti celebration) ─────────────────────── -->
+<div id="rewardOverlay" style="display:none;position:fixed;inset:0;z-index:99998;background:linear-gradient(135deg,#065f46,#047857);overflow:hidden;">
+  <canvas id="confettiCanvas" style="position:absolute;inset:0;pointer-events:none;z-index:1"></canvas>
+  <div style="position:relative;z-index:2;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;">
+    <div style="font-size:72px;margin-bottom:8px;animation:haPulse 0.8s infinite;">🎉</div>
+    <div style="color:rgba(255,255,255,.8);font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;">Task Completed On Time!</div>
+    <div style="background:#fff;border-radius:20px;padding:24px 20px;max-width:340px;width:100%;margin-bottom:20px;">
+      <div style="font-size:28px;font-weight:900;color:#065f46;margin-bottom:8px;">Great Work! 🏆</div>
+      <div id="rewardTaskTitle" style="font-size:14px;color:#475569;line-height:1.5;font-style:italic;margin-bottom:4px;"></div>
+      <div style="font-size:13px;color:#64748b;margin-top:8px;">You completed this on time. Keep it up!</div>
+    </div>
+    <button onclick="window.dismissReward()" style="padding:14px 32px;background:#fff;color:#065f46;border:none;border-radius:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;">
+      Thanks! 👊
+    </button>
+  </div>
+</div>
+
+<!-- ── SPECIAL APPRECIATION OVERLAY (golden moment) ──────────────────────── -->
+<div id="appreciationOverlay" style="display:none;position:fixed;inset:0;z-index:99997;background:linear-gradient(135deg,#78350f,#b45309);overflow-y:auto;">
+  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;">
+    <div style="width:100%;max-width:360px;text-align:center;">
+      <div style="font-size:64px;margin-bottom:8px;animation:haPulse 1.2s infinite;">⭐</div>
+      <div style="color:rgba(255,255,255,.8);font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:20px;">Special Appreciation</div>
+      <div style="background:#fff;border-radius:20px;padding:28px 22px;margin-bottom:20px;">
+        <div style="font-size:16px;font-weight:700;color:#1e293b;line-height:1.6;font-style:italic;margin-bottom:14px;" id="appreciationMsg"></div>
+        <div style="font-size:13px;color:#92400e;font-weight:800;" id="appreciationFrom"></div>
+      </div>
+      <button onclick="window.dismissAppreciation()" style="width:100%;padding:16px;background:#fff;color:#78350f;border:none;border-radius:16px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;">
+        Thank you! 🙏
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADMIN: SEND APPRECIATION MODAL ─────────────────────────────────────── -->
+<div class="modal-overlay" id="appreciationModal" style="display:none" onclick="if(event.target===this)closeAppreciationModal()">
+  <div class="modal-sheet" style="border-top:5px solid #f59e0b;">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+      <span style="font-size:22px;">⭐</span>
+      <div class="modal-title" style="margin:0;color:#92400e;">Send Appreciation</div>
+    </div>
+    <div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:16px;">
+      A personal note from you — appears as a golden full-screen moment and on the team praise wall.
+    </div>
+    <label class="calls-label">To *</label>
+    <select id="apprAssignTo" class="modal-input" style="padding:10px 14px;margin-bottom:12px;"></select>
+    <label class="calls-label">Your message *</label>
+    <textarea id="apprMessage" class="modal-input" rows="3" placeholder="e.g. Outstanding work on the DBS tender — you went above and beyond!" style="margin-bottom:20px;resize:none;line-height:1.5;"></textarea>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeAppreciationModal()">Cancel</button>
+      <button class="modal-save" style="background:#d97706;border-color:#d97706;" id="apprSendBtn" onclick="window.sendAppreciation()">⭐ Send</button>
+    </div>
+    <div id="apprErrorMsg" style="display:none;margin-top:10px;background:#fef2f2;color:#991b1b;font-size:12px;font-weight:600;padding:10px 12px;border-radius:8px;word-break:break-word;"></div>
+  </div>
+</div>
 
 <script type="module" src="meetings.js"></script>
 </body>
