@@ -108,7 +108,7 @@ function createNameBtn(name, admin, dept) {
   // Workload badges — urgent (red), overdue (amber), today (orange)
   let badgesHTML = "";
   if (!admin && allTasks.length > 0) {
-    const mine    = allTasks.filter(t => t.assignedTo === name && t.status !== "completed");
+    const mine    = allTasks.filter(t => t.assignedTo === name && t.status !== "completed" && t.status !== "pending-review");
     const urgent  = mine.filter(t => t.priority === "p1").length;
     const overdue = mine.filter(t => diffDays(t) < 0).length;
     const today   = mine.filter(t => diffDays(t) === 0).length;
@@ -461,9 +461,10 @@ function renderAdminDashboard() {
   const deptAll = allTasks.filter(t=>t.department===currentDept);
 
   emps.forEach((emp, ei) => {
-    const empTasks  = deptAll.filter(t=>t.assignedTo===emp);
-    const active    = empTasks.filter(t=>t.status!=="completed");
-    const overdueCnt= active.filter(t=>diffDays(t)<0).length;
+    const empTasks   = deptAll.filter(t=>t.assignedTo===emp);
+    const active     = empTasks.filter(t=>t.status!=="completed");
+    const reviewCnt  = empTasks.filter(t=>t.status==="pending-review").length;
+    const overdueCnt = active.filter(t=>t.status!=="pending-review"&&diffDays(t)<0).length;
 
     const color    = avatarColors[allStaff.indexOf(emp) % avatarColors.length];
     const initials = emp.split(" ").filter(w=>w).map(w=>w[0]).join("").slice(0,2).toUpperCase();
@@ -474,7 +475,7 @@ function renderAdminDashboard() {
     head.innerHTML = `
       <div class="admin-emp-av" style="background:${color}">${initials}</div>
       <div class="admin-emp-name">${emp}</div>
-      <div class="admin-emp-count">${active.length} pending${overdueCnt?" · ⚠"+overdueCnt+" overdue":""}</div>`;
+      <div class="admin-emp-count">${active.length} pending${reviewCnt?" · "+reviewCnt+" in review":""}${overdueCnt?" · ⚠"+overdueCnt+" overdue":""}</div>`;
     dashboard.appendChild(head);
 
     const buckets = bucket(empTasks);
@@ -491,7 +492,7 @@ function renderAdminDashboard() {
     // Pending-review tasks float to top for admin confirmation
     const reviewTasks = empTasks.filter(t => t.status === "pending-review");
     if (reviewTasks.length) {
-      anyTask = true;
+      anyTask = true; // employee name stays visible even if only review tasks exist
       const lbl = document.createElement("div");
       lbl.className = "sec-label";
       lbl.style.cssText = "background:#fef3c7;border-radius:8px;padding:4px 10px;";
