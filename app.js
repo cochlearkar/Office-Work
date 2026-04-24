@@ -672,9 +672,8 @@ function renderStaffView() {
 // Extracted so praise wall async doesn't break rendering
 function buildStaffTaskSections() {
   const myTasks = allTasks.filter(t => t.assignedTo === currentUser);
-
-  const myTasks = allTasks.filter(t => t.assignedTo === currentUser);
-  const pending = myTasks.filter(t => t.status !== "completed");
+  const pending = myTasks.filter(t => t.status !== "completed" && t.status !== "pending-review");
+  const reviewing = myTasks.filter(t => t.status === "pending-review");
   const overdue = pending.filter(t => diffDays(t) < 0);
   const todayT  = pending.filter(t => diffDays(t) === 0);
   const done    = myTasks.filter(t => t.status === "completed");
@@ -704,7 +703,15 @@ function buildStaffTaskSections() {
     return;
   }
 
-  // Stats shown in staffStrip above — no duplicate name card needed
+  // Greeting card with staff member's name
+  const greetHour = new Date().getHours();
+  const greetWord = greetHour < 12 ? "Good morning" : greetHour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = currentUser.split(" ")[0];
+  const greetEl = document.createElement("div");
+  greetEl.style.cssText = "padding:12px 4px 4px;margin-bottom:4px;";
+  greetEl.innerHTML = `<div style="font-size:20px;font-weight:900;color:var(--text1)">${greetWord}, ${firstName}! 👋</div>
+    <div style="font-size:12px;color:var(--text3);font-weight:600;margin-top:2px;">Here's what needs your attention today</div>`;
+  dashboard.appendChild(greetEl);
 
 
   const priChip = (t) => {
