@@ -739,13 +739,21 @@ function buildStaffTaskSections() {
     pending.filter(t => t.isHighAlert && t.priority !== "p1" && diffDays(t) !== 0)
   );
 
+  // Helper: avoids backtick-in-ternary syntax error
+  function staffDoneBtn(t, bg) {
+    if (t.status === "pending-review") {
+      return '<span style="font-size:10px;font-weight:800;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:10px;white-space:nowrap">In Review</span>';
+    }
+    return '<button onclick="toggleTask(\'' + t.id + '\',true)" style="font-size:11px;font-weight:700;color:#fff;background:' + bg + ';border:none;border-radius:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0">Done</button>';
+  }
+
   const sections = [
     { key:"today", icon:"📋", label:"Today's Tasks", accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
       tasks: todaySorted,
-      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title" style="flex:1">${t.title}${t.slot?'<br><span class="mts-time-chip">&#128336; '+_fmt12(t.slot)+'</span>':''}</div>${t.status==="pending-review"?'<span style="font-size:10px;font-weight:800;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:10px;white-space:nowrap">In Review</span>`:'<button onclick="toggleTask(\'${t.id}\',true)" style="font-size:11px;font-weight:700;color:#fff;background:#16a34a;border:none;border-radius:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0">Done</button>'}<button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => '<div class="mts-row mts-row-today">' + priChip(t) + '<div class="mts-title" style="flex:1">' + t.title + (t.slot ? '<br><span class="mts-time-chip">&#128336; ' + _fmt12(t.slot) + '</span>' : '') + '</div>' + staffDoneBtn(t,"#16a34a") + '<button class="mts-chat-btn" onclick="openChat(\'' + t.id + '\')">💬<span class="chat-badge" id="cb-' + t.id + '" style="display:none"></span></button></div>' },
     { key:"overdue", icon:"⚠️", label:"Urgent Priority", accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
       tasks: urgentSorted,
-      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title" style="flex:1">${t.title}${t.slot?'<br><span class="mts-time-chip">&#128336; '+_fmt12(t.slot)+'</span>':''}</div><div class="mts-overdue-bubble">${diffDays(t) < 0 ? Math.abs(diffDays(t))+'d overdue' : 'in '+diffDays(t)+'d'}</div>${t.status==="pending-review"?'<span style="font-size:10px;font-weight:800;color:#d97706">In Review</span>`:'<button onclick="toggleTask(\'${t.id}\',true)" style="font-size:11px;font-weight:700;color:#fff;background:#dc2626;border:none;border-radius:10px;padding:5px 10px;cursor:pointer;flex-shrink:0">Done</button>'}<button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => '<div class="mts-row mts-row-over">' + priChip(t) + '<div class="mts-title" style="flex:1">' + t.title + (t.slot ? '<br><span class="mts-time-chip">&#128336; ' + _fmt12(t.slot) + '</span>' : '') + '</div><div class="mts-overdue-bubble">' + (diffDays(t) < 0 ? Math.abs(diffDays(t)) + 'd overdue' : 'in ' + diffDays(t) + 'd') + '</div>' + staffDoneBtn(t,"#dc2626") + '<button class="mts-chat-btn" onclick="openChat(\'' + t.id + '\')">💬<span class="chat-badge" id="cb-' + t.id + '" style="display:none"></span></button></div>' },
     { key:"upcoming", icon:"🚨", label:"Admin Alert Tasks", accent:"#7c3aed", bg:"#faf5ff", border:"#e9d5ff",
       tasks: highAlertSorted,
       rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge" style="background:#ede9fe;color:#6d28d9;font-size:11px;font-weight:800;padding:3px 8px;border-radius:12px;">Alert</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
@@ -991,22 +999,6 @@ window.toggleTask = async function(id, checked) {
     await loadTasks(true);
   } catch(e) { showToast("Error submitting", "error"); console.error(e); }
 
-    if(checked){
-      setTimeout(async()=>{
-        const t=allTasks.find(t=>t.id===id);
-        if(!t||!t.repeat||t.repeat==="none") return;
-        const next=new Date(safeDate(t.dueDate));
-        const n=parseInt(t.repeat);
-        if(t.repeat==="daily")       next.setDate(next.getDate()+1);
-        else if(t.repeat==="weekly") next.setDate(next.getDate()+7);
-        else if(!isNaN(n))           next.setDate(next.getDate()+n);
-        const{id:_,createdAt:__,...rest}=t;
-        await addDoc(collection(db,"tasks"),{...rest,dueDate:next,status:"pending",createdAt:new Date()});
-        await loadTasks(true);
-        showToast("Next recurrence scheduled 🔁","success");
-      },1500);
-    }
-  } catch(e){ showToast("Error","error"); }
 };
 
 window.openEditModal = function(id) {
