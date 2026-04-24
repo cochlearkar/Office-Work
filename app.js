@@ -179,6 +179,7 @@ function loginAs(name) {
   document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
   document.getElementById("highAlertBtn").style.display  = isAdmin ? "grid"  : "none";
+  document.getElementById("appreciationBtn").style.display = isAdmin ? "grid" : "none";
   setHomeCalendarVisibility(true);
 
   // Show bottom nav + FAB for everyone
@@ -224,6 +225,9 @@ function loginAs(name) {
   // ── Start High Alert listener (staff only — watches for alerts addressed to them) ──
   startHighAlertListener();
 
+  // ── Start Reward listener (staff only) ──────────────────────────────────────
+  startRewardListener();
+
   // ── Init Meetings module ─────────────────────────────────────────────────
   initMeetings(currentUser, isAdmin, allStaff, avatarColors);
 
@@ -253,6 +257,7 @@ function loginAs(name) {
 window.logout = function() {
   if (taskListUnsub)  { taskListUnsub();  taskListUnsub  = null; }
   if (highAlertUnsub) { highAlertUnsub(); highAlertUnsub = null; }
+  if (rewardUnsub)    { rewardUnsub();    rewardUnsub    = null; }
   activeHighAlertId = null;
   document.getElementById("highAlertOverlay").style.display = "none";
   stopMeetingsListener();
@@ -482,6 +487,19 @@ function renderAdminDashboard() {
     };
 
     let anyTask = false;
+
+    // Pending-review tasks float to top for admin confirmation
+    const reviewTasks = empTasks.filter(t => t.status === "pending-review");
+    if (reviewTasks.length) {
+      anyTask = true;
+      const lbl = document.createElement("div");
+      lbl.className = "sec-label";
+      lbl.style.cssText = "background:#fef3c7;border-radius:8px;padding:4px 10px;";
+      lbl.innerHTML = `<span class="sec-dot" style="background:#d97706"></span>Awaiting Your Review (${reviewTasks.length})`;
+      dashboard.appendChild(lbl);
+      reviewTasks.forEach(t => dashboard.appendChild(buildAdminTaskRow(t)));
+    }
+
     order.forEach(sec => {
       const list = sortByPriority(buckets[sec]);
       if(!list.length) return;
@@ -507,26 +525,46 @@ function renderAdminDashboard() {
 
 function buildAdminTaskRow(t) {
   const done    = t.status==="completed";
+  const review  = t.status==="pending-review";
   const diff    = diffDays(t);
   const dotCls  = priDotClass[t.priority||"p4"];
   const dueInfo = dueChip(diff, done);
   const repeat  = repeatLabel(t.repeat);
 
   const row = document.createElement("div");
-  row.className = `task-row ${cardClass(diff,done)}${done?" done":""}`;
-  row.innerHTML = `
-    <div class="pri-dot ${dotCls}"></div>
-    <input type="checkbox" class="task-cb" ${done?"checked":""}
-      onchange="toggleTask('${t.id}',this.checked)" onclick="event.stopPropagation()">
-    <div class="task-text" title="${t.title}">${t.title}${repeat}</div>
-    <div class="task-due-chip ${dueInfo.cls}">${dueInfo.txt}</div>
-    <div class="task-acts">
-      <button class="tact-btn chat-btn" onclick="openChat('${t.id}')" title="Messages">
-        💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span>
+  row.className = `task-row ${review ? "task-row-review" : cardClass(diff,done)}${done?" done":""}`;
+
+  if (review) {
+    // Pending-review row — admin sees confirm button instead of checkbox
+    row.innerHTML = `
+      <div class="pri-dot ${dotCls}"></div>
+      <div class="task-text" title="${t.title}" style="flex:1">${t.title}${repeat}
+        <span style="font-size:10px;font-weight:800;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:10px;margin-left:6px;">AWAITING REVIEW</span>
+      </div>
+      <button onclick="toggleTask('${t.id}',true)" style="font-size:11px;font-weight:800;color:#fff;background:#16a34a;border:none;border-radius:10px;padding:5px 12px;cursor:pointer;white-space:nowrap;">
+        Confirm Done
       </button>
-      <button class="tact-btn"     onclick="openEditModal('${t.id}')"   title="Edit">✏️</button>
-      <button class="tact-btn del" onclick="openDeleteModal('${t.id}')" title="Delete">🗑</button>
-    </div>`;
+      <div class="task-acts">
+        <button class="tact-btn chat-btn" onclick="openChat('${t.id}')" title="Messages">
+          💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span>
+        </button>
+        <button class="tact-btn del" onclick="openDeleteModal('${t.id}')" title="Delete">🗑</button>
+      </div>`;
+  } else {
+    row.innerHTML = `
+      <div class="pri-dot ${dotCls}"></div>
+      <input type="checkbox" class="task-cb" ${done?"checked":""}
+        onchange="toggleTask('${t.id}',this.checked)" onclick="event.stopPropagation()">
+      <div class="task-text" title="${t.title}">${t.title}${repeat}</div>
+      <div class="task-due-chip ${dueInfo.cls}">${dueInfo.txt}</div>
+      <div class="task-acts">
+        <button class="tact-btn chat-btn" onclick="openChat('${t.id}')" title="Messages">
+          💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span>
+        </button>
+        <button class="tact-btn"     onclick="openEditModal('${t.id}')"   title="Edit">✏️</button>
+        <button class="tact-btn del" onclick="openDeleteModal('${t.id}')" title="Delete">🗑</button>
+      </div>`;
+  }
   return row;
 }
 
@@ -625,8 +663,15 @@ function _fmt12(slot) {
 
 // ── STAFF VIEW ─────────────────────────────────────
 function renderStaffView() {
-  // Staff only see their own appointment banner — no forecast or office-wide urgent panel
-  dashboard.innerHTML = buildMyAppointments();
+  // Staff only see their own appointment banner + praise wall — no forecast or office-wide urgent panel
+  buildPraiseWall().then(function(wall) {
+    dashboard.innerHTML = wall + buildMyAppointments();
+    buildStaffTaskSections();
+  });
+}
+// Extracted so praise wall async doesn't break rendering
+function buildStaffTaskSections() {
+  const myTasks = allTasks.filter(t => t.assignedTo === currentUser);
 
   const myTasks = allTasks.filter(t => t.assignedTo === currentUser);
   const pending = myTasks.filter(t => t.status !== "completed");
@@ -689,10 +734,10 @@ function renderStaffView() {
   const sections = [
     { key:"today", icon:"📋", label:"Today's Tasks", accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
       tasks: todaySorted,
-      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title">${t.title}${t.slot?'<br><span class="mts-time-chip">&#128336; '+_fmt12(t.slot)+'</span>':''}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => `<div class="mts-row mts-row-today">${priChip(t)}<div class="mts-title" style="flex:1">${t.title}${t.slot?'<br><span class="mts-time-chip">&#128336; '+_fmt12(t.slot)+'</span>':''}</div>${t.status==="pending-review"?'<span style="font-size:10px;font-weight:800;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:10px;white-space:nowrap">In Review</span>`:'<button onclick="toggleTask(\'${t.id}\',true)" style="font-size:11px;font-weight:700;color:#fff;background:#16a34a;border:none;border-radius:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0">Done</button>'}<button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"overdue", icon:"⚠️", label:"Urgent Priority", accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
       tasks: urgentSorted,
-      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title">${t.title}${t.slot?'<br><span class="mts-time-chip">&#128336; '+_fmt12(t.slot)+'</span>':''}</div><div class="mts-overdue-bubble">${diffDays(t) < 0 ? Math.abs(diffDays(t))+'d overdue' : 'in '+diffDays(t)+'d'}</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
+      rowFn: t => `<div class="mts-row mts-row-over">${priChip(t)}<div class="mts-title" style="flex:1">${t.title}${t.slot?'<br><span class="mts-time-chip">&#128336; '+_fmt12(t.slot)+'</span>':''}</div><div class="mts-overdue-bubble">${diffDays(t) < 0 ? Math.abs(diffDays(t))+'d overdue' : 'in '+diffDays(t)+'d'}</div>${t.status==="pending-review"?'<span style="font-size:10px;font-weight:800;color:#d97706">In Review</span>`:'<button onclick="toggleTask(\'${t.id}\',true)" style="font-size:11px;font-weight:700;color:#fff;background:#dc2626;border:none;border-radius:10px;padding:5px 10px;cursor:pointer;flex-shrink:0">Done</button>'}<button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
     { key:"upcoming", icon:"🚨", label:"Admin Alert Tasks", accent:"#7c3aed", bg:"#faf5ff", border:"#e9d5ff",
       tasks: highAlertSorted,
       rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge" style="background:#ede9fe;color:#6d28d9;font-size:11px;font-weight:800;padding:3px 8px;border-radius:12px;">Alert</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
@@ -870,18 +915,42 @@ window.addTask = async function() {
 };
 
 window.toggleTask = async function(id, checked) {
-  if(!isAdmin) return;
-  try {
-    await updateDoc(doc(db,"tasks",id),{status:checked?"completed":"pending"});
-    showToast(checked?"Done! ":"Reopened",checked?"success":"");
-    await loadTasks(true);
+  const t = allTasks.find(x => x.id === id);
+  if (!t) return;
 
-    // If this is a high alert task being marked done, auto-acknowledge the alert
-    // so the staff member's lock screen is released
-    if (checked) {
-      try {
-        const t = allTasks.find(t => t.id === id);
-        if (t && t.isHighAlert && t.assignedTo) {
+  if (isAdmin) {
+    // Admin confirms a pending-review task → mark completed and trigger rewards
+    const wasReview = t.status === "pending-review";
+    const newStatus = checked ? "completed" : "pending";
+    try {
+      await updateDoc(doc(db,"tasks",id), {
+        status: newStatus,
+        completedAt: checked ? new Date() : null
+      });
+      showToast(checked ? "Done! " : "Reopened", checked ? "success" : "");
+      await loadTasks(true);
+
+      // If confirming completion, check if it was on time → trigger routine reward
+      if (checked && wasReview && t.assignedTo) {
+        const due = t.dueDate && t.dueDate.toDate ? t.dueDate.toDate() : (t.dueDate ? new Date(t.dueDate) : null);
+        const now = new Date();
+        if (!due || now <= due) {
+          // On time or early — push a routine reward
+          try {
+            await addDoc(collection(db, "rewards"), {
+              type: "routine",
+              assignedTo: t.assignedTo,
+              taskTitle: t.title,
+              pushedAt: new Date(),
+              seen: false
+            });
+          } catch(re) { console.warn("Reward write failed:", re.message); }
+        }
+      }
+
+      // Auto-acknowledge high alert if marked done
+      if (checked && t.isHighAlert && t.assignedTo) {
+        try {
           const alertSnap = await getDocs(collection(db, "highAlerts"));
           alertSnap.docs.forEach(async function(alertDoc) {
             const d = alertDoc.data();
@@ -889,11 +958,30 @@ window.toggleTask = async function(id, checked) {
               await updateDoc(doc(db, "highAlerts", alertDoc.id), { acknowledged: true });
             }
           });
+        } catch(alertErr) {
+          console.warn("Could not auto-acknowledge high alert:", alertErr.message);
         }
-      } catch(alertErr) {
-        console.warn("Could not auto-acknowledge high alert:", alertErr.message);
       }
-    }
+    } catch(e) { showToast("Error updating task", "error"); console.error(e); }
+    return;
+  }
+
+  // Staff marking their OWN task — submit for review
+  if (t.assignedTo !== currentUser) return;
+  if (!checked) {
+    // Staff un-checking a pending-review task → revert to pending
+    try {
+      await updateDoc(doc(db,"tasks",id), { status: "pending", completedAt: null });
+      showToast("Reopened", "");
+      await loadTasks(true);
+    } catch(e) { showToast("Error", "error"); }
+    return;
+  }
+  try {
+    await updateDoc(doc(db,"tasks",id), { status: "pending-review", completedAt: new Date() });
+    showToast("Submitted for review! Waiting for admin to confirm.", "success");
+    await loadTasks(true);
+  } catch(e) { showToast("Error submitting", "error"); console.error(e); }
 
     if(checked){
       setTimeout(async()=>{
@@ -1012,6 +1100,7 @@ function bucket(tasks){
   const s={overdue:[],today:[],tomorrow:[],upcoming:[],completed:[]};
   tasks.forEach(t=>{
     if(t.status==="completed"){s.completed.push(t);return;}
+    if(t.status==="pending-review"){return;} // shown separately in review band
     const d=diffDays(t);
     if(d<0)s.overdue.push(t);
     else if(d===0)s.today.push(t);
@@ -1909,6 +1998,7 @@ window.sendHighAlert = async function() {
 function startHighAlertListener() {
   if (isAdmin) return; // admin never receives lockscreen
   if (highAlertUnsub) { highAlertUnsub(); highAlertUnsub = null; }
+  if (rewardUnsub)    { rewardUnsub();    rewardUnsub    = null; }
 
   // Single where clause only — avoids needing a composite Firestore index.
   // Filter acknowledged=false in JS.
@@ -2172,3 +2262,198 @@ window.switchToCalendarTab = function () {
   document.getElementById("bnavDocs")?.classList.remove("active");
   if (typeof _origSwitchCal === "function") _origSwitchCal();
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+// REWARDS & APPRECIATION SYSTEM
+// Routine: auto-triggered when admin confirms on-time task completion
+// Special: admin pushes a personal appreciation note to any staff member
+// Wall:    recent appreciations visible to all staff on home page
+// ══════════════════════════════════════════════════════════════════════════════
+
+let rewardUnsub = null;
+
+// ── Start listening for rewards addressed to current staff member ─────────────
+function startRewardListener() {
+  if (isAdmin) return;
+  if (rewardUnsub) { rewardUnsub(); rewardUnsub = null; }
+
+  const q = query(collection(db, "rewards"), where("assignedTo", "==", currentUser));
+  rewardUnsub = onSnapshot(q, snap => {
+    snap.docs.forEach(async d => {
+      const data = d.data();
+      if (data.seen) return;
+      // Mark seen immediately so it only shows once
+      try { await updateDoc(doc(db, "rewards", d.id), { seen: true }); } catch(e) {}
+      if (data.type === "routine") {
+        showRoutineReward(data.taskTitle || "your task");
+      } else if (data.type === "special") {
+        showSpecialAppreciation(data);
+      }
+    });
+  }, err => console.error("Reward listener:", err));
+}
+
+// ── Routine reward: confetti full-screen moment ───────────────────────────────
+function showRoutineReward(taskTitle) {
+  var overlay = document.getElementById("rewardOverlay");
+  if (!overlay) return;
+  document.getElementById("rewardTaskTitle").textContent = '"' + taskTitle + '"';
+  overlay.style.display = "flex";
+  // Launch confetti
+  launchConfetti();
+  // Auto-dismiss after 6 seconds
+  setTimeout(function() {
+    overlay.style.display = "none";
+  }, 6000);
+}
+
+window.dismissReward = function() {
+  var overlay = document.getElementById("rewardOverlay");
+  if (overlay) overlay.style.display = "none";
+};
+
+// ── Special appreciation: golden full-screen moment ───────────────────────────
+function showSpecialAppreciation(data) {
+  var overlay = document.getElementById("appreciationOverlay");
+  if (!overlay) return;
+  document.getElementById("appreciationMsg").textContent = data.message || "Outstanding work!";
+  document.getElementById("appreciationFrom").textContent = "— " + (data.pushedBy || "Admin");
+  overlay.style.display = "flex";
+}
+
+window.dismissAppreciation = function() {
+  var overlay = document.getElementById("appreciationOverlay");
+  if (overlay) overlay.style.display = "none";
+};
+
+// ── Confetti launcher ─────────────────────────────────────────────────────────
+function launchConfetti() {
+  var canvas = document.getElementById("confettiCanvas");
+  if (!canvas) return;
+  var ctx = canvas.getContext("2d");
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  var pieces = [];
+  var colors = ["#f59e0b","#10b981","#3b82f6","#ec4899","#8b5cf6","#ef4444","#06b6d4"];
+  for (var i = 0; i < 120; i++) {
+    pieces.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height - canvas.height,
+      w: Math.random() * 10 + 5,
+      h: Math.random() * 6 + 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * 360,
+      vx: (Math.random() - 0.5) * 3,
+      vy: Math.random() * 4 + 2,
+      vr: (Math.random() - 0.5) * 6
+    });
+  }
+  var frame = 0;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pieces.forEach(function(p) {
+      ctx.save();
+      ctx.translate(p.x + p.w/2, p.y + p.h/2);
+      ctx.rotate(p.rot * Math.PI / 180);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+      ctx.restore();
+      p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+    });
+    frame++;
+    if (frame < 120) requestAnimationFrame(draw);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  draw();
+}
+
+// ── Admin: open special appreciation modal ────────────────────────────────────
+window.openAppreciationModal = function() {
+  if (!isAdmin) return;
+  var sel = document.getElementById("apprAssignTo");
+  var staff = allStaff.filter(function(s) { return s !== ADMIN; });
+  sel.innerHTML = staff.map(function(s) { return '<option value="'+s+'">'+s+'</option>'; }).join("");
+  document.getElementById("apprMessage").value = "";
+  var errDiv = document.getElementById("apprErrorMsg");
+  if (errDiv) { errDiv.style.display = "none"; errDiv.textContent = ""; }
+  document.getElementById("appreciationModal").style.display = "flex";
+  setTimeout(function() { document.getElementById("apprMessage").focus(); }, 100);
+};
+
+window.closeAppreciationModal = function() {
+  document.getElementById("appreciationModal").style.display = "none";
+};
+
+window.sendAppreciation = async function() {
+  if (!isAdmin) return;
+  var assignedTo = document.getElementById("apprAssignTo").value;
+  var message    = document.getElementById("apprMessage").value.trim();
+  if (!message) { showToast("Write a message", "error"); return; }
+
+  var btn = document.getElementById("apprSendBtn");
+  btn.textContent = "Sending..."; btn.disabled = true;
+
+  try {
+    // Write reward doc — the recipient's listener will pick it up
+    await addDoc(collection(db, "rewards"), {
+      type: "special",
+      assignedTo: assignedTo,
+      message: message,
+      pushedBy: ADMIN,
+      pushedAt: new Date(),
+      seen: false,
+      showOnWall: true  // visible to all staff on praise wall
+    });
+    closeAppreciationModal();
+    showToast("Appreciation sent to " + assignedTo + " !", "success");
+  } catch(e) {
+    var msg = e && e.message ? e.message : String(e);
+    var errDiv = document.getElementById("apprErrorMsg");
+    if (errDiv) { errDiv.textContent = "Error: " + msg; errDiv.style.display = "block"; }
+    console.error("sendAppreciation:", e);
+  }
+  btn.textContent = "Send"; btn.disabled = false;
+};
+
+// ── Praise Wall: shown on staff home page ─────────────────────────────────────
+async function buildPraiseWall() {
+  try {
+    const snap = await getDocs(collection(db, "rewards"));
+    const recent = snap.docs
+      .map(function(d) { return Object.assign({ id: d.id }, d.data()); })
+      .filter(function(r) { return r.type === "special" && r.showOnWall; })
+      .sort(function(a, b) {
+        const ta = a.pushedAt && a.pushedAt.toDate ? a.pushedAt.toDate() : new Date(0);
+        const tb = b.pushedAt && b.pushedAt.toDate ? b.pushedAt.toDate() : new Date(0);
+        return tb - ta;
+      })
+      .slice(0, 5);
+
+    if (!recent.length) return "";
+
+    const cards = recent.map(function(r) {
+      const initials = r.assignedTo.split(" ").filter(Boolean).map(function(w){return w[0];}).join("").slice(0,2).toUpperCase();
+      const color = avatarColors[allStaff.indexOf(r.assignedTo) % avatarColors.length] || "#8b5cf6";
+      const date = r.pushedAt && r.pushedAt.toDate ? r.pushedAt.toDate().toLocaleDateString("en-IN",{day:"numeric",month:"short"}) : "";
+      return `<div style="background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:8px;border:1px solid #fde68a;display:flex;gap:12px;align-items:flex-start;">
+        <div style="width:38px;height:38px;border-radius:50%;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0">${initials}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:2px">${r.assignedTo}</div>
+          <div style="font-size:13px;color:#475569;line-height:1.4">"${r.message}"</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:4px;font-weight:600">${date} · from ${r.pushedBy || "Admin"}</div>
+        </div>
+        <div style="font-size:22px;flex-shrink:0">⭐</div>
+      </div>`;
+    }).join("");
+
+    return `<div style="background:linear-gradient(135deg,#fffbeb,#fef9c3);border-radius:18px;padding:16px;margin-bottom:14px;border:1.5px solid #fde68a;">
+      <div style="font-size:12px;font-weight:800;color:#92400e;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px;">
+        ⭐ Wall of Recognition
+      </div>
+      ${cards}
+    </div>`;
+  } catch(e) {
+    console.warn("buildPraiseWall:", e.message);
+    return "";
+  }
+}
