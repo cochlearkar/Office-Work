@@ -680,11 +680,11 @@ function buildStaffTaskSections() {
   const upcomingT  = active.filter(t => diffDays(t) > 0);
   const alertT     = active.filter(t => t.isHighAlert);
 
-  // Strip — simple counts only
-  var strip = '<div class="sstrip-pill sp-pending"><div class="snum">' + active.length + '</div><div class="slbl">Pending</div></div>';
-  if (todayT.length)    strip += '<div class="sstrip-pill" style="background:var(--amber-l)"><div class="snum" style="color:var(--amber)">' + todayT.length + '</div><div class="slbl" style="color:#92400e">Today</div></div>';
+  // Strip
+  var strip = '<div class="sstrip-pill sp-pending"><div class="snum">' + (active.length + inProgress.length) + '</div><div class="slbl">Pending</div></div>';
+  if (todayT.length)     strip += '<div class="sstrip-pill" style="background:var(--amber-l)"><div class="snum" style="color:var(--amber)">' + todayT.length + '</div><div class="slbl" style="color:#92400e">Today</div></div>';
   if (inProgress.length) strip += '<div class="sstrip-pill" style="background:#eff6ff"><div class="snum" style="color:#1d4ed8">' + inProgress.length + '</div><div class="slbl" style="color:#1e40af">In Progress</div></div>';
-  if (overdueT.length)  strip += '<div class="sstrip-pill" style="background:#fffbeb"><div class="snum" style="color:#b45309">' + overdueT.length + '</div><div class="slbl" style="color:#92400e">To Be Completed</div></div>';
+  if (overdueT.length)   strip += '<div class="sstrip-pill" style="background:#fffbeb"><div class="snum" style="color:#b45309">' + overdueT.length + '</div><div class="slbl" style="color:#92400e">To Be Completed</div></div>';
   document.getElementById("staffStripInner").innerHTML = strip;
 
   if (!active.length && !inProgress.length) {
@@ -704,84 +704,114 @@ function buildStaffTaskSections() {
   greetEl.innerHTML = '<div style="font-size:18px;font-weight:800;color:var(--text1)">' + gw + ', ' + fn + ' 👋</div>';
   dashboard.appendChild(greetEl);
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   function priDot(t) {
     var c = {p1:"var(--c-u)",p2:"var(--c-h)",p3:"var(--c-n)",p4:"var(--c-l)"}[t.priority||"p4"];
-    return '<span style="width:8px;height:8px;border-radius:50%;background:' + c + ';flex-shrink:0;display:inline-block"></span>';
+    return '<span style="width:8px;height:8px;border-radius:50%;background:' + c + ';flex-shrink:0;margin-top:2px;display:inline-block"></span>';
   }
 
   function dayBadge(t) {
     var d = diffDays(t);
-    if (d === 0) return '<span style="font-size:10px;font-weight:700;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:8px;white-space:nowrap">Today</span>';
-    if (d < 0)   return '<span style="font-size:10px;font-weight:700;color:#b45309;background:#fef9c3;padding:2px 7px;border-radius:8px;white-space:nowrap">' + Math.abs(d) + 'd ago</span>';
-    return '<span style="font-size:10px;font-weight:700;color:#0369a1;background:#e0f2fe;padding:2px 7px;border-radius:8px;white-space:nowrap">in ' + d + 'd</span>';
+    if (d === 0) return '<span class="sf-day-badge" style="color:#d97706;background:#fef3c7">Today</span>';
+    if (d < 0)   return '<span class="sf-day-badge" style="color:#b45309;background:#fef9c3">' + Math.abs(d) + 'd ago</span>';
+    return '<span class="sf-day-badge" style="color:#0369a1;background:#e0f2fe">in ' + d + 'd</span>';
   }
 
-  function actionBtns(t) {
-    if (t.status === "in-progress") {
-      return '<button onclick="markStaffDone(\'' + t.id + '\')" class="sf-btn sf-btn-green">Done</button>';
-    }
-    return '<button onclick="moveToInProgress(\'' + t.id + '\')" class="sf-btn sf-btn-blue">In Progress</button>' +
-           '<button onclick="markStaffDone(\'' + t.id + '\')" class="sf-btn sf-btn-green">Done</button>';
-  }
-
+  // Build a task row — tap to expand/collapse action drawer
   function makeRow(t) {
-    return '<div class="sf-row">' +
-      '<div class="sf-row-left">' +
-        priDot(t) +
-        '<div class="sf-row-info">' +
+    var isIP = t.status === "in-progress";
+    var ipBadge = isIP ? '<span class="sf-day-badge" style="color:#1d4ed8;background:#eff6ff">In Progress</span>' : "";
+    var alertBadge = t.isHighAlert ? '<span class="sf-day-badge" style="color:#7c3aed;background:#f3e8ff">Alert</span>' : "";
+
+    // Action drawer (hidden by default, shown on tap)
+    var drawer = '<div class="sf-drawer" id="drawer-' + t.id + '" style="display:none">';
+    if (!isIP) {
+      drawer += '<button class="sf-action-btn sf-action-blue" onclick="event.stopPropagation();staffMoveIP(\''+ t.id +'\')">';
+      drawer += '<span class="sf-action-icon">⚙️</span>In Progress</button>';
+    }
+    drawer += '<button class="sf-action-btn sf-action-green" onclick="event.stopPropagation();staffMarkDone(\''+ t.id +'\')">';
+    drawer += '<span class="sf-action-icon">✅</span>Mark Done</button>';
+    drawer += '<button class="sf-action-btn sf-action-chat" onclick="event.stopPropagation();openChat(\''+ t.id +'\')">';
+    drawer += '<span class="sf-action-icon">💬</span>Message<span class="chat-badge" id="cb-' + t.id + '" style="display:none;position:relative;top:0;right:0;margin-left:4px"></span></button>';
+    drawer += '</div>';
+
+    return '<div class="sf-row" id="row-' + t.id + '" onclick="toggleStaffRow(\''+ t.id +'\')">' +
+      '<div class="sf-row-main">' +
+        '<div class="sf-row-top">' +
+          priDot(t) +
           '<div class="sf-title">' + t.title + '</div>' +
-          '<div class="sf-meta">' + dayBadge(t) +
-            (t.isHighAlert ? '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#f3e8ff;padding:2px 7px;border-radius:8px;margin-left:4px">Alert</span>' : '') +
-          '</div>' +
+          '<span class="sf-chevron" id="chev-' + t.id + '">›</span>' +
         '</div>' +
+        '<div class="sf-meta">' + dayBadge(t) + ipBadge + alertBadge + '</div>' +
       '</div>' +
-      '<div class="sf-row-right">' +
-        actionBtns(t) +
-        '<button class="mts-chat-btn" onclick="openChat(\'' + t.id + '\')">💬<span class="chat-badge" id="cb-' + t.id + '" style="display:none"></span></button>' +
-      '</div>' +
+      drawer +
     '</div>';
   }
 
   function byPri(arr) {
-    return [...arr].sort((a,b) => {
+    return [...arr].sort(function(a,b) {
       if(a.slot && b.slot) return a.slot.localeCompare(b.slot);
       if(a.slot) return -1; if(b.slot) return 1;
       return ({p1:1,p2:2,p3:3,p4:4}[a.priority||"p4"]) - ({p1:1,p2:2,p3:3,p4:4}[b.priority||"p4"]);
     });
   }
 
-  function renderSection(label, tasks, accentColor) {
+  function renderSection(icon, label, tasks, accent) {
     if (!tasks.length) return;
     var sec = document.createElement("div");
     sec.className = "sf-section";
     sec.innerHTML =
-      '<div class="sf-sec-label" style="color:' + accentColor + '">' + label + ' <span class="sf-sec-count">' + tasks.length + '</span></div>' +
+      '<div class="sf-sec-label" style="color:' + accent + '">' + icon + ' ' + label +
+      ' <span class="sf-sec-count">' + tasks.length + '</span></div>' +
       tasks.map(makeRow).join("");
     dashboard.appendChild(sec);
   }
 
-  if (alertT.length)      renderSection("🚨 Admin Alert", byPri(alertT), "#7c3aed");
-  if (overdueT.length)    renderSection("📌 To Be Completed", byPri(overdueT), "#b45309");
-  if (todayT.length)      renderSection("📋 Today", byPri(todayT), "#d97706");
-  if (inProgress.length)  renderSection("⚙️ In Progress", byPri(inProgress), "#1d4ed8");
-  if (upcomingT.length)   renderSection("📅 Upcoming", byPri(upcomingT), "#0369a1");
+  if (alertT.length)     renderSection("🚨", "Admin Alert",        byPri(alertT),     "#7c3aed");
+  if (overdueT.length)   renderSection("📌", "To Be Completed",    byPri(overdueT),   "#b45309");
+  if (todayT.length)     renderSection("📋", "Today",              byPri(todayT),     "#d97706");
+  if (inProgress.length) renderSection("⚙️", "In Progress",        byPri(inProgress), "#1d4ed8");
+  if (upcomingT.length)  renderSection("📅", "Upcoming",           byPri(upcomingT),  "#0369a1");
 }
 
-window.moveToInProgress = async function(id) {
+// Accordion — tap row to expand, tap again or tap another to collapse
+var _openStaffRow = null;
+window.toggleStaffRow = function(id) {
+  // Collapse previously open row
+  if (_openStaffRow && _openStaffRow !== id) {
+    var prev = document.getElementById("drawer-" + _openStaffRow);
+    var prevChev = document.getElementById("chev-" + _openStaffRow);
+    var prevRow  = document.getElementById("row-"   + _openStaffRow);
+    if (prev) prev.style.display = "none";
+    if (prevChev) { prevChev.textContent = "›"; prevChev.style.transform = ""; }
+    if (prevRow)  prevRow.classList.remove("sf-row-open");
+  }
+  var drawer = document.getElementById("drawer-" + id);
+  var chev   = document.getElementById("chev-"   + id);
+  var row    = document.getElementById("row-"    + id);
+  if (!drawer) return;
+  var opening = drawer.style.display === "none";
+  drawer.style.display = opening ? "flex" : "none";
+  if (chev)  { chev.textContent = opening ? "›" : "›"; chev.style.transform = opening ? "rotate(90deg)" : ""; }
+  if (row)   row.classList.toggle("sf-row-open", opening);
+  _openStaffRow = opening ? id : null;
+};
+
+window.staffMoveIP = async function(id) {
   try {
     await updateDoc(doc(db,"tasks",id), { status: "in-progress" });
     showToast("Moved to In Progress", "success");
+    _openStaffRow = null;
     await loadTasks(true);
-  } catch(e) { showToast("Error", "error"); console.error(e); }
+  } catch(e) { showToast("Error", "error"); }
 };
 
-window.markStaffDone = async function(id) {
+window.staffMarkDone = async function(id) {
   try {
     await updateDoc(doc(db,"tasks",id), { status: "pending-review", completedAt: new Date() });
     showToast("Submitted! Admin will confirm.", "success");
+    _openStaffRow = null;
     await loadTasks(true);
-  } catch(e) { showToast("Error", "error"); console.error(e); }
+  } catch(e) { showToast("Error", "error"); }
 };
 
 function buildStaffCard(t) {
