@@ -664,11 +664,78 @@ function _fmt12(slot) {
 
 // ── STAFF VIEW ─────────────────────────────────────
 function renderStaffView() {
-  // Staff only see their own appointment banner + praise wall — no forecast or office-wide urgent panel
+  dashboard.innerHTML = "";
+
+  // Greeting
+  const hr = new Date().getHours();
+  const gw = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
+  const fn = currentUser.split(" ")[0];
+  const today = new Date().toLocaleDateString("en-IN", { weekday:"long", day:"numeric", month:"long" });
+  const greetEl = document.createElement("div");
+  greetEl.className = "sv-greeting";
+  greetEl.innerHTML =
+    '<div class="sv-greet-name">' + gw + ', ' + fn + ' 👋</div>' +
+    '<div class="sv-greet-date">' + today + '</div>';
+  dashboard.appendChild(greetEl);
+
+  // Meetings from Google Calendar (top — replaces event strip)
+  const meetEl = document.createElement("div");
+  meetEl.id = "sv-meetings";
+  meetEl.className = "sv-meetings-card";
+  meetEl.innerHTML = '<div class="sv-card-label">📅 Today\'s Meetings</div>' +
+    '<div class="sv-meetings-loading">Loading calendar…</div>';
+  dashboard.appendChild(meetEl);
+  _buildStaffMeetings(meetEl);
+
+  // Tasks — today first, then rest
+  buildStaffTaskSections();
+
+  // Praise wall at the bottom
   buildPraiseWall().then(function(wall) {
-    dashboard.innerHTML = wall + buildMyAppointments();
-    buildStaffTaskSections();
+    if (!wall) return;
+    const pw = document.createElement("div");
+    pw.innerHTML = wall;
+    dashboard.appendChild(pw);
   });
+}
+
+// Pull today's meetings from Google Calendar ICS and show them
+async function _buildStaffMeetings(el) {
+  try {
+    const text   = await fetchICS();
+    const events = parseICS(text);
+    const now    = new Date();
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
+    const todayMeets = events
+      .filter(e => e.start >= todayStart && e.start <= todayEnd)
+      .sort((a,b) => a.start - b.start);
+
+    if (!todayMeets.length) {
+      el.innerHTML = '<div class="sv-card-label">📅 Today\'s Meetings</div>' +
+        '<div class="sv-meetings-empty">No meetings scheduled today</div>';
+      return;
+    }
+
+    const rows = todayMeets.map(function(e) {
+      const allDay = e.start.getHours() === 0 && e.start.getMinutes() === 0;
+      const time   = allDay ? "All day" : e.start.toLocaleTimeString("en-IN", {hour:"2-digit", minute:"2-digit", hour12:true});
+      const isPast = e.start < now;
+      return '<div class="sv-meet-row' + (isPast ? " sv-meet-past" : "") + '">' +
+        '<div class="sv-meet-time">' + time + '</div>' +
+        '<div class="sv-meet-info">' +
+          '<div class="sv-meet-title">' + (e.title || "(No title)") + '</div>' +
+          (e.location ? '<div class="sv-meet-loc">📍 ' + e.location + '</div>' : '') +
+        '</div>' +
+        (isPast ? '' : '<div class="sv-meet-dot"></div>') +
+      '</div>';
+    }).join("");
+
+    el.innerHTML = '<div class="sv-card-label">📅 Today\'s Meetings <span class="sv-card-count">' + todayMeets.length + '</span></div>' + rows;
+  } catch(e) {
+    el.innerHTML = '<div class="sv-card-label">📅 Today\'s Meetings</div>' +
+      '<div class="sv-meetings-empty">Calendar unavailable</div>';
+  }
 }
 // Extracted so praise wall async doesn't break rendering
 function buildStaffTaskSections() {
@@ -711,9 +778,11 @@ function buildStaffTaskSections() {
 
   function dayBadge(t) {
     var d = diffDays(t);
-    if (d === 0) return '<span class="sf-day-badge" style="color:#d97706;background:#fef3c7">Today</span>';
-    if (d < 0)   return '<span class="sf-day-badge" style="color:#b45309;background:#fef9c3">' + Math.abs(d) + 'd ago</span>';
-    return '<span class="sf-day-badge" style="color:#0369a1;background:#e0f2fe">in ' + d + 'd</span>';
+    if (d === 0) return '<span class="sf-day-badge" style="color:#d97706;background:#fef3c7">Due today</span>';
+    if (d === -1) return '<span class="sf-day-badge" style="color:#b45309;background:#fef9c3">Due yesterday</span>';
+    if (d < 0)   return '<span class="sf-day-badge" style="color:#b45309;background:#fef9c3">Due ' + Math.abs(d) + ' days ago</span>';
+    if (d === 1) return '<span class="sf-day-badge" style="color:#0369a1;background:#e0f2fe">Due tomorrow</span>';
+    return '<span class="sf-day-badge" style="color:#0369a1;background:#e0f2fe">Due in ' + d + ' days</span>';
   }
 
   // Build a task row — tap to expand/collapse action drawer
@@ -766,10 +835,11 @@ function buildStaffTaskSections() {
     dashboard.appendChild(sec);
   }
 
-  if (alertT.length)     renderSection("🚨", "Admin Alert",        byPri(alertT),     "#7c3aed");
-  if (overdueT.length)   renderSection("📌", "To Be Completed",    byPri(overdueT),   "#b45309");
+  // Today always first, then alert, then in-progress, to-be-completed, upcoming
   if (todayT.length)     renderSection("📋", "Today",              byPri(todayT),     "#d97706");
+  if (alertT.length)     renderSection("🚨", "Admin Alert",        byPri(alertT),     "#7c3aed");
   if (inProgress.length) renderSection("⚙️", "In Progress",        byPri(inProgress), "#1d4ed8");
+  if (overdueT.length)   renderSection("📌", "To Be Completed",    byPri(overdueT),   "#b45309");
   if (upcomingT.length)  renderSection("📅", "Upcoming",           byPri(upcomingT),  "#0369a1");
 }
 
