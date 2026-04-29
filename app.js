@@ -674,29 +674,20 @@ function renderStaffView() {
 function buildStaffTaskSections() {
   const myTasks    = allTasks.filter(t => t.assignedTo === currentUser);
   const inProgress = myTasks.filter(t => t.status === "in-progress");
-  const reviewing  = myTasks.filter(t => t.status === "pending-review");
   const active     = myTasks.filter(t => t.status === "pending");
-  const done       = myTasks.filter(t => t.status === "completed");
+  const overdueT   = active.filter(t => diffDays(t) < 0);
+  const todayT     = active.filter(t => diffDays(t) === 0);
+  const upcomingT  = active.filter(t => diffDays(t) > 0);
+  const alertT     = active.filter(t => t.isHighAlert);
 
-  const todayT    = active.filter(t => diffDays(t) === 0);
-  const overdueT  = active.filter(t => diffDays(t) < 0);
-  const upcomingT = active.filter(t => diffDays(t) > 0);
+  // Strip — simple counts only
+  var strip = '<div class="sstrip-pill sp-pending"><div class="snum">' + active.length + '</div><div class="slbl">Pending</div></div>';
+  if (todayT.length)    strip += '<div class="sstrip-pill" style="background:var(--amber-l)"><div class="snum" style="color:var(--amber)">' + todayT.length + '</div><div class="slbl" style="color:#92400e">Today</div></div>';
+  if (inProgress.length) strip += '<div class="sstrip-pill" style="background:#eff6ff"><div class="snum" style="color:#1d4ed8">' + inProgress.length + '</div><div class="slbl" style="color:#1e40af">In Progress</div></div>';
+  if (overdueT.length)  strip += '<div class="sstrip-pill" style="background:#fffbeb"><div class="snum" style="color:#b45309">' + overdueT.length + '</div><div class="slbl" style="color:#92400e">To Be Completed</div></div>';
+  document.getElementById("staffStripInner").innerHTML = strip;
 
-  // Strip counter
-  document.getElementById("staffStripInner").innerHTML =
-    '<div class="sstrip-pill" style="background:var(--amber-l)">' +
-      '<div class="snum" style="color:var(--amber)">' + todayT.length + '</div>' +
-      '<div class="slbl" style="color:#92400e">Today</div></div>' +
-    (overdueT.length ? '<div class="sstrip-pill" style="background:#fffbeb">' +
-      '<div class="snum" style="color:#b45309">' + overdueT.length + '</div>' +
-      '<div class="slbl" style="color:#92400e">To Be Completed</div></div>' : '') +
-    (inProgress.length ? '<div class="sstrip-pill" style="background:#eff6ff">' +
-      '<div class="snum" style="color:#1d4ed8">' + inProgress.length + '</div>' +
-      '<div class="slbl" style="color:#1e40af">In Progress</div></div>' : '') +
-    '<div class="sstrip-pill sp-done">' +
-      '<div class="snum">' + done.length + '</div><div class="slbl">Done</div></div>';
-
-  if (!active.length && !inProgress.length && !reviewing.length && !done.length) {
+  if (!active.length && !inProgress.length) {
     const el = document.createElement("div");
     el.className = "empty-state";
     el.innerHTML = '<div class="empty-icon">🎉</div><h3>All done!</h3><p>No tasks assigned right now.</p>';
@@ -705,101 +696,76 @@ function buildStaffTaskSections() {
   }
 
   // Greeting
-  const greetHour = new Date().getHours();
-  const greetWord = greetHour < 12 ? "Good morning" : greetHour < 17 ? "Good afternoon" : "Good evening";
-  const firstName = currentUser.split(" ")[0];
+  const hr = new Date().getHours();
+  const gw = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
+  const fn = currentUser.split(" ")[0];
   const greetEl = document.createElement("div");
-  greetEl.style.cssText = "padding:12px 4px 4px;margin-bottom:4px;";
-  greetEl.innerHTML = '<div style="font-size:20px;font-weight:900;color:var(--text1)">' + greetWord + ', ' + firstName + '! 👋</div>' +
-    '<div style="font-size:12px;color:var(--text3);font-weight:600;margin-top:2px;">Here\'s your full task list</div>';
+  greetEl.style.cssText = "padding:14px 2px 8px;";
+  greetEl.innerHTML = '<div style="font-size:18px;font-weight:800;color:var(--text1)">' + gw + ', ' + fn + ' 👋</div>';
   dashboard.appendChild(greetEl);
 
-  const priChip = function(t) {
-    var colors = {p1:"var(--c-u)", p2:"var(--c-h)", p3:"var(--c-n)", p4:"var(--c-l)"};
-    return '<span class="mts-pri-dot" style="background:' + (colors[t.priority||"p4"]) + '"></span>';
-  };
-
-  function rowActions(t, doneBg) {
-    var btns = "";
-    if (t.status === "pending-review") {
-      btns += '<span style="font-size:10px;font-weight:800;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:10px;white-space:nowrap">In Review</span>';
-    } else if (t.status === "in-progress") {
-      btns += '<button onclick="markStaffDone(\''+ t.id +'\')" style="font-size:11px;font-weight:700;color:#fff;background:#16a34a;border:none;border-radius:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0">Done</button>';
-    } else {
-      btns += '<button onclick="moveToInProgress(\''+ t.id +'\')" style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0;margin-right:4px">In Progress</button>';
-      btns += '<button onclick="markStaffDone(\''+ t.id +'\')" style="font-size:11px;font-weight:700;color:#fff;background:' + doneBg + ';border:none;border-radius:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0">Done</button>';
-    }
-    btns += '<button class="mts-chat-btn" onclick="openChat(\''+ t.id +'\')">💬<span class="chat-badge" id="cb-'+ t.id +'" style="display:none"></span></button>';
-    return btns;
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function priDot(t) {
+    var c = {p1:"var(--c-u)",p2:"var(--c-h)",p3:"var(--c-n)",p4:"var(--c-l)"}[t.priority||"p4"];
+    return '<span style="width:8px;height:8px;border-radius:50%;background:' + c + ';flex-shrink:0;display:inline-block"></span>';
   }
 
-  function makeRow(t, rowCls, showDayChip, doneBg) {
+  function dayBadge(t) {
     var d = diffDays(t);
-    var dayChip = "";
-    if (showDayChip) {
-      if (d < 0) dayChip = '<div class="mts-overdue-bubble" style="background:#fca5a5;color:#7f1d1d">' + Math.abs(d) + 'd</div>';
-      else if (d > 0) dayChip = '<div class="mts-overdue-bubble" style="background:#bfdbfe;color:#1e3a5f">in ' + d + 'd</div>';
-    }
-    return '<div class="mts-row ' + rowCls + '">' +
-      priChip(t) +
-      '<div class="mts-title" style="flex:1">' + t.title +
-        (t.slot ? '<br><span class="mts-time-chip">&#128336; ' + _fmt12(t.slot) + '</span>' : '') +
-      '</div>' + dayChip + rowActions(t, doneBg||"#16a34a") + '</div>';
+    if (d === 0) return '<span style="font-size:10px;font-weight:700;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:8px;white-space:nowrap">Today</span>';
+    if (d < 0)   return '<span style="font-size:10px;font-weight:700;color:#b45309;background:#fef9c3;padding:2px 7px;border-radius:8px;white-space:nowrap">' + Math.abs(d) + 'd ago</span>';
+    return '<span style="font-size:10px;font-weight:700;color:#0369a1;background:#e0f2fe;padding:2px 7px;border-radius:8px;white-space:nowrap">in ' + d + 'd</span>';
   }
 
-  function byPriThenSlot(arr) {
-    return [...arr].sort(function(a,b) {
+  function actionBtns(t) {
+    if (t.status === "in-progress") {
+      return '<button onclick="markStaffDone(\'' + t.id + '\')" class="sf-btn sf-btn-green">Done</button>';
+    }
+    return '<button onclick="moveToInProgress(\'' + t.id + '\')" class="sf-btn sf-btn-blue">In Progress</button>' +
+           '<button onclick="markStaffDone(\'' + t.id + '\')" class="sf-btn sf-btn-green">Done</button>';
+  }
+
+  function makeRow(t) {
+    return '<div class="sf-row">' +
+      '<div class="sf-row-left">' +
+        priDot(t) +
+        '<div class="sf-row-info">' +
+          '<div class="sf-title">' + t.title + '</div>' +
+          '<div class="sf-meta">' + dayBadge(t) +
+            (t.isHighAlert ? '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#f3e8ff;padding:2px 7px;border-radius:8px;margin-left:4px">Alert</span>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="sf-row-right">' +
+        actionBtns(t) +
+        '<button class="mts-chat-btn" onclick="openChat(\'' + t.id + '\')">💬<span class="chat-badge" id="cb-' + t.id + '" style="display:none"></span></button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function byPri(arr) {
+    return [...arr].sort((a,b) => {
       if(a.slot && b.slot) return a.slot.localeCompare(b.slot);
       if(a.slot) return -1; if(b.slot) return 1;
       return ({p1:1,p2:2,p3:3,p4:4}[a.priority||"p4"]) - ({p1:1,p2:2,p3:3,p4:4}[b.priority||"p4"]);
     });
   }
 
-  var alertTasks = byPriThenSlot(active.filter(function(t){ return t.isHighAlert; }));
+  function renderSection(label, tasks, accentColor) {
+    if (!tasks.length) return;
+    var sec = document.createElement("div");
+    sec.className = "sf-section";
+    sec.innerHTML =
+      '<div class="sf-sec-label" style="color:' + accentColor + '">' + label + ' <span class="sf-sec-count">' + tasks.length + '</span></div>' +
+      tasks.map(makeRow).join("");
+    dashboard.appendChild(sec);
+  }
 
-  var sections = [
-    { key:"to-be-completed", tasks: byPriThenSlot(overdueT),
-      icon:"📌", label:"To Be Completed", accent:"#b45309", bg:"#fffbeb",
-      rowFn: function(t) { return makeRow(t,"mts-row-over",true,"#b45309"); } },
-    { key:"today", tasks: byPriThenSlot(todayT),
-      icon:"📋", label:"Today\'s Tasks", accent:"#d97706", bg:"#fff7ed",
-      rowFn: function(t) { return makeRow(t,"mts-row-today",false,"#16a34a"); } },
-    { key:"in-progress", tasks: byPriThenSlot(inProgress),
-      icon:"⚙️", label:"In Progress", accent:"#1d4ed8", bg:"#eff6ff",
-      rowFn: function(t) { return makeRow(t,"mts-row-tmrw",true,"#16a34a"); } },
-    { key:"upcoming", tasks: byPriThenSlot(upcomingT),
-      icon:"📅", label:"Upcoming", accent:"#0369a1", bg:"#f0f9ff",
-      rowFn: function(t) { return makeRow(t,"mts-row-up",true,"#0369a1"); } },
-    { key:"alerts", tasks: alertTasks,
-      icon:"🚨", label:"Admin Alert Tasks", accent:"#7c3aed", bg:"#faf5ff",
-      rowFn: function(t) { return makeRow(t,"mts-row-tmrw",true,"#7c3aed"); } },
-    { key:"review", tasks: reviewing,
-      icon:"🔍", label:"Awaiting Confirmation", accent:"#92400e", bg:"#fef3c7",
-      rowFn: function(t) { return makeRow(t,"mts-row-today",false,"#92400e"); } },
-    { key:"completed", tasks: done,
-      icon:"✅", label:"Completed", accent:"#94a3b8", bg:"#f8fafc",
-      rowFn: function(t) {
-        return '<div class="mts-row mts-row-done"><div class="mts-title mts-done-title" style="flex:1">' + t.title + '</div><div class="mts-badge mts-badge-done">Done</div></div>';
-      } }
-  ];
-
-  sections.forEach(function(sec) {
-    if (!sec.tasks.length) return;
-    var card = document.createElement("div");
-    card.className = "mts-card mts-card-" + sec.key;
-    var hdr = document.createElement("div");
-    hdr.className = "mts-sec-header";
-    hdr.style.cssText = "background:" + sec.bg + ";";
-    hdr.innerHTML = '<span class="mts-sec-icon">' + sec.icon + '</span>' +
-      '<span class="mts-sec-label" style="color:' + sec.accent + '">' + sec.label + '</span>' +
-      '<span class="mts-sec-count" style="background:' + sec.accent + '20;color:' + sec.accent + '">' + sec.tasks.length + '</span>';
-    card.appendChild(hdr);
-    var block = document.createElement("div");
-    block.className = "mts-block";
-    block.innerHTML = sec.tasks.map(sec.rowFn).join("");
-    card.appendChild(block);
-    dashboard.appendChild(card);
-  });
+  if (alertT.length)      renderSection("🚨 Admin Alert", byPri(alertT), "#7c3aed");
+  if (overdueT.length)    renderSection("📌 To Be Completed", byPri(overdueT), "#b45309");
+  if (todayT.length)      renderSection("📋 Today", byPri(todayT), "#d97706");
+  if (inProgress.length)  renderSection("⚙️ In Progress", byPri(inProgress), "#1d4ed8");
+  if (upcomingT.length)   renderSection("📅 Upcoming", byPri(upcomingT), "#0369a1");
 }
 
 window.moveToInProgress = async function(id) {
