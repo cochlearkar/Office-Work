@@ -672,115 +672,151 @@ function renderStaffView() {
 }
 // Extracted so praise wall async doesn't break rendering
 function buildStaffTaskSections() {
-  const myTasks = allTasks.filter(t => t.assignedTo === currentUser);
-  const pending = myTasks.filter(t => t.status !== "completed" && t.status !== "pending-review");
-  const reviewing = myTasks.filter(t => t.status === "pending-review");
-  const overdue = pending.filter(t => diffDays(t) < 0);
-  const todayT  = pending.filter(t => diffDays(t) === 0);
-  const done    = myTasks.filter(t => t.status === "completed");
+  const myTasks    = allTasks.filter(t => t.assignedTo === currentUser);
+  const inProgress = myTasks.filter(t => t.status === "in-progress");
+  const reviewing  = myTasks.filter(t => t.status === "pending-review");
+  const active     = myTasks.filter(t => t.status === "pending");
+  const done       = myTasks.filter(t => t.status === "completed");
 
-  const urgentCount    = pending.filter(t => t.priority === "p1").length;
-  const highAlertCount = pending.filter(t => t.isHighAlert).length;
-  document.getElementById("staffStripInner").innerHTML = `
-    <div class="sstrip-pill" style="background:var(--amber-l)">
-      <div class="snum" style="color:var(--amber)">${todayT.length}</div>
-      <div class="slbl" style="color:#92400e">Today</div>
-    </div>
-    ${urgentCount ? `<div class="sstrip-pill" style="background:var(--red-l)">
-      <div class="snum" style="color:var(--red)">${urgentCount}</div>
-      <div class="slbl" style="color:#b91c1c">Urgent</div></div>` : ""}
-    ${highAlertCount ? `<div class="sstrip-pill" style="background:#faf5ff">
-      <div class="snum" style="color:#7c3aed">${highAlertCount}</div>
-      <div class="slbl" style="color:#6d28d9">Alert</div></div>` : ""}
-    <div class="sstrip-pill sp-done">
-      <div class="snum">${done.filter(t => diffDays(t) === 0).length}</div><div class="slbl">Done</div>
-    </div>`;
+  const todayT    = active.filter(t => diffDays(t) === 0);
+  const overdueT  = active.filter(t => diffDays(t) < 0);
+  const upcomingT = active.filter(t => diffDays(t) > 0);
 
-  if (!pending.length && !done.length) {
+  // Strip counter
+  document.getElementById("staffStripInner").innerHTML =
+    '<div class="sstrip-pill" style="background:var(--amber-l)">' +
+      '<div class="snum" style="color:var(--amber)">' + todayT.length + '</div>' +
+      '<div class="slbl" style="color:#92400e">Today</div></div>' +
+    (overdueT.length ? '<div class="sstrip-pill" style="background:#fffbeb">' +
+      '<div class="snum" style="color:#b45309">' + overdueT.length + '</div>' +
+      '<div class="slbl" style="color:#92400e">To Be Completed</div></div>' : '') +
+    (inProgress.length ? '<div class="sstrip-pill" style="background:#eff6ff">' +
+      '<div class="snum" style="color:#1d4ed8">' + inProgress.length + '</div>' +
+      '<div class="slbl" style="color:#1e40af">In Progress</div></div>' : '') +
+    '<div class="sstrip-pill sp-done">' +
+      '<div class="snum">' + done.length + '</div><div class="slbl">Done</div></div>';
+
+  if (!active.length && !inProgress.length && !reviewing.length && !done.length) {
     const el = document.createElement("div");
     el.className = "empty-state";
-    el.innerHTML = `<div class="empty-icon">🎉</div><h3>All done!</h3><p>No tasks assigned right now.</p>`;
+    el.innerHTML = '<div class="empty-icon">🎉</div><h3>All done!</h3><p>No tasks assigned right now.</p>';
     dashboard.appendChild(el);
     return;
   }
 
-  // Greeting card with staff member's name
+  // Greeting
   const greetHour = new Date().getHours();
   const greetWord = greetHour < 12 ? "Good morning" : greetHour < 17 ? "Good afternoon" : "Good evening";
   const firstName = currentUser.split(" ")[0];
   const greetEl = document.createElement("div");
   greetEl.style.cssText = "padding:12px 4px 4px;margin-bottom:4px;";
-  greetEl.innerHTML = `<div style="font-size:20px;font-weight:900;color:var(--text1)">${greetWord}, ${firstName}! 👋</div>
-    <div style="font-size:12px;color:var(--text3);font-weight:600;margin-top:2px;">Here's what needs your attention today</div>`;
+  greetEl.innerHTML = '<div style="font-size:20px;font-weight:900;color:var(--text1)">' + greetWord + ', ' + firstName + '! 👋</div>' +
+    '<div style="font-size:12px;color:var(--text3);font-weight:600;margin-top:2px;">Here\'s your full task list</div>';
   dashboard.appendChild(greetEl);
 
-
-  const priChip = (t) => {
-    const colors = {p1:"var(--c-u)", p2:"var(--c-h)", p3:"var(--c-n)", p4:"var(--c-l)"};
-    return `<span class="mts-pri-dot" style="background:${colors[t.priority||'p4']}"></span>`;
+  const priChip = function(t) {
+    var colors = {p1:"var(--c-u)", p2:"var(--c-h)", p3:"var(--c-n)", p4:"var(--c-l)"};
+    return '<span class="mts-pri-dot" style="background:' + (colors[t.priority||"p4"]) + '"></span>';
   };
 
-  // Staff see: today's tasks + urgent (p1) across any date + admin high alert tasks
-  // Future/upcoming tasks are hidden to keep focus on what matters now
-  const todaySorted = [...pending.filter(t => diffDays(t) === 0)]
-    .sort((a,b) => {
-      if(a.slot && b.slot) return a.slot.localeCompare(b.slot);
-      if(a.slot) return -1; if(b.slot) return 1;
-      return ({p1:1,p2:2,p3:3,p4:4}[a.priority||'p4']) - ({p1:1,p2:2,p3:3,p4:4}[b.priority||'p4']);
-    });
-
-  // Urgent = p1, not due today (today already shown above), not completed
-  const urgentSorted = sortByPriority(
-    pending.filter(t => t.priority === "p1" && diffDays(t) !== 0)
-  );
-
-  // High alert tasks assigned by admin (any due date, not completed)
-  const highAlertSorted = sortByPriority(
-    pending.filter(t => t.isHighAlert && t.priority !== "p1" && diffDays(t) !== 0)
-  );
-
-  // Helper: avoids backtick-in-ternary syntax error
-  function staffDoneBtn(t, bg) {
+  function rowActions(t, doneBg) {
+    var btns = "";
     if (t.status === "pending-review") {
-      return '<span style="font-size:10px;font-weight:800;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:10px;white-space:nowrap">In Review</span>';
+      btns += '<span style="font-size:10px;font-weight:800;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:10px;white-space:nowrap">In Review</span>';
+    } else if (t.status === "in-progress") {
+      btns += '<button onclick="markStaffDone(\''+ t.id +'\')" style="font-size:11px;font-weight:700;color:#fff;background:#16a34a;border:none;border-radius:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0">Done</button>';
+    } else {
+      btns += '<button onclick="moveToInProgress(\''+ t.id +'\')" style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0;margin-right:4px">In Progress</button>';
+      btns += '<button onclick="markStaffDone(\''+ t.id +'\')" style="font-size:11px;font-weight:700;color:#fff;background:' + doneBg + ';border:none;border-radius:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0">Done</button>';
     }
-    return '<button onclick="toggleTask(\'' + t.id + '\',true)" style="font-size:11px;font-weight:700;color:#fff;background:' + bg + ';border:none;border-radius:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0">Done</button>';
+    btns += '<button class="mts-chat-btn" onclick="openChat(\''+ t.id +'\')">💬<span class="chat-badge" id="cb-'+ t.id +'" style="display:none"></span></button>';
+    return btns;
   }
 
-  const sections = [
-    { key:"today", icon:"📋", label:"Today's Tasks", accent:"#d97706", bg:"#fffbeb", border:"#fde68a",
-      tasks: todaySorted,
-      rowFn: t => '<div class="mts-row mts-row-today">' + priChip(t) + '<div class="mts-title" style="flex:1">' + t.title + (t.slot ? '<br><span class="mts-time-chip">&#128336; ' + _fmt12(t.slot) + '</span>' : '') + '</div>' + staffDoneBtn(t,"#16a34a") + '<button class="mts-chat-btn" onclick="openChat(\'' + t.id + '\')">💬<span class="chat-badge" id="cb-' + t.id + '" style="display:none"></span></button></div>' },
-    { key:"overdue", icon:"⚠️", label:"Urgent Priority", accent:"#dc2626", bg:"#fef2f2", border:"#fecaca",
-      tasks: urgentSorted,
-      rowFn: t => '<div class="mts-row mts-row-over">' + priChip(t) + '<div class="mts-title" style="flex:1">' + t.title + (t.slot ? '<br><span class="mts-time-chip">&#128336; ' + _fmt12(t.slot) + '</span>' : '') + '</div><div class="mts-overdue-bubble">' + (diffDays(t) < 0 ? Math.abs(diffDays(t)) + 'd overdue' : 'in ' + diffDays(t) + 'd') + '</div>' + staffDoneBtn(t,"#dc2626") + '<button class="mts-chat-btn" onclick="openChat(\'' + t.id + '\')">💬<span class="chat-badge" id="cb-' + t.id + '" style="display:none"></span></button></div>' },
-    { key:"upcoming", icon:"🚨", label:"Admin Alert Tasks", accent:"#7c3aed", bg:"#faf5ff", border:"#e9d5ff",
-      tasks: highAlertSorted,
-      rowFn: t => `<div class="mts-row mts-row-tmrw">${priChip(t)}<div class="mts-title">${t.title}</div><div class="mts-badge" style="background:#ede9fe;color:#6d28d9;font-size:11px;font-weight:800;padding:3px 8px;border-radius:12px;">Alert</div><button class="mts-chat-btn" onclick="openChat('${t.id}')">💬<span class="chat-badge" id="cb-${t.id}" style="display:none"></span></button></div>` },
-    { key:"completed", icon:"✅", label:"Completed Today", accent:"#94a3b8", bg:"#f8fafc", border:"#e2e8f0",
-      tasks: done.filter(t => diffDays(t) === 0),
-      rowFn: t => `<div class="mts-row mts-row-done"><div class="mts-title mts-done-title">${t.title}</div><div class="mts-badge mts-badge-done">Done</div></div>` }
+  function makeRow(t, rowCls, showDayChip, doneBg) {
+    var d = diffDays(t);
+    var dayChip = "";
+    if (showDayChip) {
+      if (d < 0) dayChip = '<div class="mts-overdue-bubble" style="background:#fca5a5;color:#7f1d1d">' + Math.abs(d) + 'd</div>';
+      else if (d > 0) dayChip = '<div class="mts-overdue-bubble" style="background:#bfdbfe;color:#1e3a5f">in ' + d + 'd</div>';
+    }
+    return '<div class="mts-row ' + rowCls + '">' +
+      priChip(t) +
+      '<div class="mts-title" style="flex:1">' + t.title +
+        (t.slot ? '<br><span class="mts-time-chip">&#128336; ' + _fmt12(t.slot) + '</span>' : '') +
+      '</div>' + dayChip + rowActions(t, doneBg||"#16a34a") + '</div>';
+  }
+
+  function byPriThenSlot(arr) {
+    return [...arr].sort(function(a,b) {
+      if(a.slot && b.slot) return a.slot.localeCompare(b.slot);
+      if(a.slot) return -1; if(b.slot) return 1;
+      return ({p1:1,p2:2,p3:3,p4:4}[a.priority||"p4"]) - ({p1:1,p2:2,p3:3,p4:4}[b.priority||"p4"]);
+    });
+  }
+
+  var alertTasks = byPriThenSlot(active.filter(function(t){ return t.isHighAlert; }));
+
+  var sections = [
+    { key:"to-be-completed", tasks: byPriThenSlot(overdueT),
+      icon:"📌", label:"To Be Completed", accent:"#b45309", bg:"#fffbeb",
+      rowFn: function(t) { return makeRow(t,"mts-row-over",true,"#b45309"); } },
+    { key:"today", tasks: byPriThenSlot(todayT),
+      icon:"📋", label:"Today\'s Tasks", accent:"#d97706", bg:"#fff7ed",
+      rowFn: function(t) { return makeRow(t,"mts-row-today",false,"#16a34a"); } },
+    { key:"in-progress", tasks: byPriThenSlot(inProgress),
+      icon:"⚙️", label:"In Progress", accent:"#1d4ed8", bg:"#eff6ff",
+      rowFn: function(t) { return makeRow(t,"mts-row-tmrw",true,"#16a34a"); } },
+    { key:"upcoming", tasks: byPriThenSlot(upcomingT),
+      icon:"📅", label:"Upcoming", accent:"#0369a1", bg:"#f0f9ff",
+      rowFn: function(t) { return makeRow(t,"mts-row-up",true,"#0369a1"); } },
+    { key:"alerts", tasks: alertTasks,
+      icon:"🚨", label:"Admin Alert Tasks", accent:"#7c3aed", bg:"#faf5ff",
+      rowFn: function(t) { return makeRow(t,"mts-row-tmrw",true,"#7c3aed"); } },
+    { key:"review", tasks: reviewing,
+      icon:"🔍", label:"Awaiting Confirmation", accent:"#92400e", bg:"#fef3c7",
+      rowFn: function(t) { return makeRow(t,"mts-row-today",false,"#92400e"); } },
+    { key:"completed", tasks: done,
+      icon:"✅", label:"Completed", accent:"#94a3b8", bg:"#f8fafc",
+      rowFn: function(t) {
+        return '<div class="mts-row mts-row-done"><div class="mts-title mts-done-title" style="flex:1">' + t.title + '</div><div class="mts-badge mts-badge-done">Done</div></div>';
+      } }
   ];
 
-  sections.forEach(sec => {
+  sections.forEach(function(sec) {
     if (!sec.tasks.length) return;
-    const card = document.createElement("div");
-    card.className = `mts-card mts-card-${sec.key}`;
-    const hdr = document.createElement("div");
+    var card = document.createElement("div");
+    card.className = "mts-card mts-card-" + sec.key;
+    var hdr = document.createElement("div");
     hdr.className = "mts-sec-header";
-    hdr.style.cssText = `background:${sec.bg};`;
-    hdr.innerHTML = `<span class="mts-sec-icon">${sec.icon}</span>
-      <span class="mts-sec-label" style="color:${sec.accent}">${sec.label}</span>
-      <span class="mts-sec-count" style="background:${sec.accent}20;color:${sec.accent}">${sec.tasks.length}</span>`;
+    hdr.style.cssText = "background:" + sec.bg + ";";
+    hdr.innerHTML = '<span class="mts-sec-icon">' + sec.icon + '</span>' +
+      '<span class="mts-sec-label" style="color:' + sec.accent + '">' + sec.label + '</span>' +
+      '<span class="mts-sec-count" style="background:' + sec.accent + '20;color:' + sec.accent + '">' + sec.tasks.length + '</span>';
     card.appendChild(hdr);
-    const block = document.createElement("div");
+    var block = document.createElement("div");
     block.className = "mts-block";
-
     block.innerHTML = sec.tasks.map(sec.rowFn).join("");
     card.appendChild(block);
     dashboard.appendChild(card);
   });
 }
+
+window.moveToInProgress = async function(id) {
+  try {
+    await updateDoc(doc(db,"tasks",id), { status: "in-progress" });
+    showToast("Moved to In Progress", "success");
+    await loadTasks(true);
+  } catch(e) { showToast("Error", "error"); console.error(e); }
+};
+
+window.markStaffDone = async function(id) {
+  try {
+    await updateDoc(doc(db,"tasks",id), { status: "pending-review", completedAt: new Date() });
+    showToast("Submitted! Admin will confirm.", "success");
+    await loadTasks(true);
+  } catch(e) { showToast("Error", "error"); console.error(e); }
+};
 
 function buildStaffCard(t) {
   const done = t.status === "completed";
