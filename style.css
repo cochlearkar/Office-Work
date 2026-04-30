@@ -3017,3 +3017,74 @@ body{
 .sf-action-blue  { color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; }
 .sf-action-green { color: #fff; background: #16a34a; }
 .sf-action-chat  { color: #475569; background: #e2e8f0; }
+
+/* ══ SUNRISE BRIEFING CARD ══════════════════════════════════════════ */
+.sr-card {
+  border-radius: 20px;
+  padding: 20px 18px 16px;
+  margin-bottom: 20px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.sr-card::before {
+  content: "";
+  position: absolute;
+  top: -30px; right: -30px;
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.07);
+  pointer-events: none;
+}
+.sr-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+.sr-greeting {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.2;
+}
+.sr-date {
+  font-size: 12px;
+  color: rgba(255,255,255,.7);
+  font-weight: 600;
+  margin-top: 4px;
+}
+.sr-pills {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.sr-pill {
+  border-radius: 12px;
+  padding: 10px 6px;
+  text-align: center;
+  backdrop-filter: blur(4px);
+}
+.sr-pill-num {
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.sr-pill-lbl {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  opacity: .85;
+}
+.sr-note {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,.75);
+  font-style: italic;
+  line-height: 1.5;
+  border-top: 1px solid rgba(255,255,255,.15);
+  padding-top: 12px;
+}
