@@ -666,18 +666,6 @@ function _fmt12(slot) {
 function renderStaffView() {
   dashboard.innerHTML = "";
 
-  // Greeting
-  const hr = new Date().getHours();
-  const gw = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
-  const fn = currentUser.split(" ")[0];
-  const today = new Date().toLocaleDateString("en-IN", { weekday:"long", day:"numeric", month:"long" });
-  const greetEl = document.createElement("div");
-  greetEl.className = "sv-greeting";
-  greetEl.innerHTML =
-    '<div class="sv-greet-name">' + gw + ', ' + fn + ' 👋</div>' +
-    '<div class="sv-greet-date">' + today + '</div>';
-  dashboard.appendChild(greetEl);
-
   // Sunrise briefing card
   const sunEl = document.createElement("div");
   sunEl.id = "sv-sunrise";
@@ -743,29 +731,36 @@ async function _buildSunriseCard(el) {
   } catch(e) {}
 
   // Stat pills
-  function pill(val, label, bg, col) {
-    return '<div class="sr-pill" style="background:' + bg + ';color:' + col + '">' +
+  function pill(val, label) {
+    return '<div class="sr-pill">' +
       '<div class="sr-pill-num">' + val + '</div>' +
       '<div class="sr-pill-lbl">' + label + '</div>' +
     '</div>';
   }
 
+  // Use full name in card
+  const fullName = currentUser;
+
   el.className = "sr-card";
-  el.style.background = "linear-gradient(135deg," + gradFrom + "," + gradTo + ")";
   el.innerHTML =
-    '<div class="sr-top">' +
-      '<div>' +
-        '<div class="sr-greeting">' + greetIcon + ' ' + gw + ', ' + fn + '</div>' +
-        '<div class="sr-date">' + date + '</div>' +
+    '<div class="sr-bg" style="background:linear-gradient(135deg,' + gradFrom + ',' + gradTo + ')"></div>' +
+    '<div class="sr-shine"></div>' +
+    '<div class="sr-content">' +
+      '<div class="sr-top-row">' +
+        '<div class="sr-icon-bubble">' + greetIcon + '</div>' +
+        '<div class="sr-date-badge">' + date + '</div>' +
       '</div>' +
-    '</div>' +
-    '<div class="sr-pills">' +
-      pill(todayT.length,      "Today",       "rgba(255,255,255,.18)", "#fff") +
-      pill(inProgT.length,     "In Progress", "rgba(255,255,255,.18)", "#fff") +
-      pill(toCompleteT.length, "To Complete", "rgba(255,255,255,.18)", "#fff") +
-      pill(meetCount,          "Meetings",    "rgba(255,255,255,.18)", "#fff") +
-    '</div>' +
-    '<div class="sr-note">"' + note + '"</div>';
+      '<div class="sr-greeting">' + gw + '</div>' +
+      '<div class="sr-name">' + fullName + '</div>' +
+      '<div class="sr-pills">' +
+        pill(todayT.length,      "Today",       "") +
+        pill(inProgT.length,     "In Progress", "") +
+        pill(toCompleteT.length, "To Complete", "") +
+        pill(meetCount,          "Meetings",    "") +
+      '</div>' +
+      '<div class="sr-divider"></div>' +
+      '<div class="sr-note">' + note + '</div>' +
+    '</div>';
 }
 // Extracted so praise wall async doesn't break rendering
 function buildStaffTaskSections() {
@@ -791,15 +786,6 @@ function buildStaffTaskSections() {
     dashboard.appendChild(el);
     return;
   }
-
-  // Greeting
-  const hr = new Date().getHours();
-  const gw = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
-  const fn = currentUser.split(" ")[0];
-  const greetEl = document.createElement("div");
-  greetEl.style.cssText = "padding:14px 2px 8px;";
-  greetEl.innerHTML = '<div style="font-size:18px;font-weight:800;color:var(--text1)">' + gw + ', ' + fn + ' 👋</div>';
-  dashboard.appendChild(greetEl);
 
   function priDot(t) {
     var c = {p1:"var(--c-u)",p2:"var(--c-h)",p3:"var(--c-n)",p4:"var(--c-l)"}[t.priority||"p4"];
