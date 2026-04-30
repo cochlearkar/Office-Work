@@ -3020,39 +3020,77 @@ body{
 
 /* ══ SUNRISE BRIEFING CARD ══════════════════════════════════════════ */
 .sr-card {
-  border-radius: 20px;
-  padding: 20px 18px 16px;
-  margin-bottom: 20px;
-  color: #fff;
   position: relative;
+  border-radius: 24px;
+  margin-bottom: 22px;
   overflow: hidden;
+  min-height: 210px;
 }
-.sr-card::before {
-  content: "";
+.sr-bg {
   position: absolute;
-  top: -30px; right: -30px;
-  width: 120px; height: 120px;
+  inset: 0;
+  z-index: 0;
+}
+.sr-shine {
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 200px; height: 200px;
   border-radius: 50%;
-  background: rgba(255,255,255,.07);
+  background: rgba(255,255,255,.10);
+  z-index: 1;
   pointer-events: none;
 }
-.sr-top {
+.sr-shine::after {
+  content: "";
+  position: absolute;
+  bottom: -80px; left: -80px;
+  width: 160px; height: 160px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.06);
+}
+.sr-content {
+  position: relative;
+  z-index: 2;
+  padding: 20px 20px 18px;
+}
+.sr-top-row {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
+}
+.sr-icon-bubble {
+  font-size: 28px;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.18);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+}
+.sr-date-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255,255,255,.85);
+  background: rgba(255,255,255,.15);
+  padding: 5px 12px;
+  border-radius: 20px;
+  backdrop-filter: blur(4px);
+  letter-spacing: .01em;
 }
 .sr-greeting {
-  font-size: 20px;
-  font-weight: 800;
-  color: #fff;
-  line-height: 1.2;
-}
-.sr-date {
-  font-size: 12px;
-  color: rgba(255,255,255,.7);
+  font-size: 13px;
   font-weight: 600;
-  margin-top: 4px;
+  color: rgba(255,255,255,.75);
+  letter-spacing: .02em;
+  margin-bottom: 2px;
+}
+.sr-name {
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1.15;
+  margin-bottom: 16px;
+  letter-spacing: -.01em;
 }
 .sr-pills {
   display: grid;
@@ -3061,14 +3099,17 @@ body{
   margin-bottom: 14px;
 }
 .sr-pill {
-  border-radius: 12px;
-  padding: 10px 6px;
+  background: rgba(255,255,255,.15);
+  backdrop-filter: blur(8px);
+  border-radius: 14px;
+  padding: 10px 4px;
   text-align: center;
-  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,255,255,.12);
 }
 .sr-pill-num {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 900;
+  color: #fff;
   line-height: 1;
   margin-bottom: 4px;
 }
@@ -3077,14 +3118,17 @@ body{
   font-weight: 800;
   letter-spacing: .05em;
   text-transform: uppercase;
-  opacity: .85;
+  color: rgba(255,255,255,.78);
+}
+.sr-divider {
+  height: 1px;
+  background: rgba(255,255,255,.15);
+  margin-bottom: 12px;
 }
 .sr-note {
   font-size: 12px;
-  font-weight: 600;
-  color: rgba(255,255,255,.75);
+  font-weight: 500;
+  color: rgba(255,255,255,.78);
   font-style: italic;
-  line-height: 1.5;
-  border-top: 1px solid rgba(255,255,255,.15);
-  padding-top: 12px;
+  line-height: 1.55;
 }
