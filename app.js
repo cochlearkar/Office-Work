@@ -180,7 +180,7 @@ function loginAs(name) {
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
   document.getElementById("highAlertBtn").style.display  = isAdmin ? "grid"  : "none";
   document.getElementById("appreciationBtn").style.display = isAdmin ? "grid" : "none";
-  setHomeCalendarVisibility(true);
+  setHomeCalendarVisibility(isAdmin); // staff see meetings inside Calendar tab only
 
   // Show bottom nav + FAB for everyone
   const bNav = document.getElementById("bottomNav");
@@ -678,14 +678,11 @@ function renderStaffView() {
     '<div class="sv-greet-date">' + today + '</div>';
   dashboard.appendChild(greetEl);
 
-  // Meetings from Google Calendar (top — replaces event strip)
-  const meetEl = document.createElement("div");
-  meetEl.id = "sv-meetings";
-  meetEl.className = "sv-meetings-card";
-  meetEl.innerHTML = '<div class="sv-card-label">📅 Today\'s Meetings</div>' +
-    '<div class="sv-meetings-loading">Loading calendar…</div>';
-  dashboard.appendChild(meetEl);
-  _buildStaffMeetings(meetEl);
+  // Sunrise briefing card
+  const sunEl = document.createElement("div");
+  sunEl.id = "sv-sunrise";
+  dashboard.appendChild(sunEl);
+  _buildSunriseCard(sunEl);
 
   // Tasks — today first, then rest
   buildStaffTaskSections();
@@ -699,43 +696,76 @@ function renderStaffView() {
   });
 }
 
-// Pull today's meetings from Google Calendar ICS and show them
-async function _buildStaffMeetings(el) {
+// Sunrise briefing card — daily summary + motivational note
+async function _buildSunriseCard(el) {
+  const myTasks    = allTasks.filter(t => t.assignedTo === currentUser);
+  const todayT     = myTasks.filter(t => t.status === "pending" && diffDays(t) === 0);
+  const inProgT    = myTasks.filter(t => t.status === "in-progress");
+  const toCompleteT= myTasks.filter(t => t.status === "pending" && diffDays(t) < 0);
+  const upcomingT  = myTasks.filter(t => t.status === "pending" && diffDays(t) > 0);
+
+  const hr   = new Date().getHours();
+  const fn   = currentUser.split(" ")[0];
+  const date = new Date().toLocaleDateString("en-IN", {weekday:"long", day:"numeric", month:"long"});
+
+  // Time-based gradient and greeting
+  var gradFrom, gradTo, greetIcon;
+  if (hr < 6)       { gradFrom="#1e293b"; gradTo="#334155"; greetIcon="🌙"; }
+  else if (hr < 12) { gradFrom="#f97316"; gradTo="#fbbf24"; greetIcon="🌅"; }
+  else if (hr < 17) { gradFrom="#0ea5e9"; gradTo="#38bdf8"; greetIcon="☀️"; }
+  else if (hr < 20) { gradFrom="#7c3aed"; gradTo="#a78bfa"; greetIcon="🌆"; }
+  else              { gradFrom="#1e293b"; gradTo="#4338ca"; greetIcon="🌙"; }
+
+  const gw = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
+
+  // Motivational notes pool — rotates by day of year
+  const notes = [
+    "Every task you finish is a step forward. You've got this.",
+    "Small progress is still progress. Keep going.",
+    "Today is a great day to make a difference.",
+    "Focus on one task at a time. You are doing well.",
+    "Your work matters. Let's make today count.",
+    "Consistency beats perfection. Show up and do your best.",
+    "One completed task at a time — that's how great work gets done.",
+    "Great things are built one day at a time. Today is your day.",
+  ];
+  const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(),0,0)) / 86400000);
+  const note = notes[dayOfYear % notes.length];
+
+  // Meeting count from ICS
+  var meetCount = 0;
   try {
-    const text   = await fetchICS();
+    const text = await fetchICS();
     const events = parseICS(text);
-    const now    = new Date();
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
     const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
-    const todayMeets = events
-      .filter(e => e.start >= todayStart && e.start <= todayEnd)
-      .sort((a,b) => a.start - b.start);
+    meetCount = events.filter(e => e.start >= todayStart && e.start <= todayEnd).length;
+  } catch(e) {}
 
-    if (!todayMeets.length) {
-      el.innerHTML = '<div class="sv-card-label">📅 Today\'s Meetings</div>' +
-        '<div class="sv-meetings-empty">No meetings scheduled today</div>';
-      return;
-    }
-
-    const rows = todayMeets.map(function(e) {
-      const allDay = e.start.getHours() === 0 && e.start.getMinutes() === 0;
-      const time   = allDay ? "All day" : e.start.toLocaleTimeString("en-IN", {hour:"2-digit", minute:"2-digit", hour12:true});
-      const isPast = e.start < now;
-      return '<div class="sv-meet-row' + (isPast ? " sv-meet-past" : "") + '">' +
-        '<div class="sv-meet-time">' + time + '</div>' +
-        '<div class="sv-meet-info">' +
-          '<div class="sv-meet-title">' + (e.title || "(No title)") + '</div>' +
-          (e.location ? '<div class="sv-meet-loc">📍 ' + e.location + '</div>' : '') +
-        '</div>' +
-        (isPast ? '' : '<div class="sv-meet-dot"></div>') +
-      '</div>';
-    }).join("");
-
-    el.innerHTML = '<div class="sv-card-label">📅 Today\'s Meetings <span class="sv-card-count">' + todayMeets.length + '</span></div>' + rows;
-  } catch(e) {
-    el.innerHTML = '<div class="sv-card-label">📅 Today\'s Meetings</div>' +
-      '<div class="sv-meetings-empty">Calendar unavailable</div>';
+  // Stat pills
+  function pill(val, label, bg, col) {
+    return '<div class="sr-pill" style="background:' + bg + ';color:' + col + '">' +
+      '<div class="sr-pill-num">' + val + '</div>' +
+      '<div class="sr-pill-lbl">' + label + '</div>' +
+    '</div>';
   }
+
+  el.className = "sr-card";
+  el.style.background = "linear-gradient(135deg," + gradFrom + "," + gradTo + ")";
+  el.innerHTML =
+    '<div class="sr-top">' +
+      '<div>' +
+        '<div class="sr-greeting">' + greetIcon + ' ' + gw + ', ' + fn + '</div>' +
+        '<div class="sr-date">' + date + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="sr-pills">' +
+      pill(todayT.length,      "Today",       "rgba(255,255,255,.18)", "#fff") +
+      pill(inProgT.length,     "In Progress", "rgba(255,255,255,.18)", "#fff") +
+      pill(toCompleteT.length, "To Complete", "rgba(255,255,255,.18)", "#fff") +
+      pill(meetCount,          "Meetings",    "rgba(255,255,255,.18)", "#fff") +
+    '</div>' +
+    '<div class="sr-note">"' + note + '"</div>';
 }
 // Extracted so praise wall async doesn't break rendering
 function buildStaffTaskSections() {
