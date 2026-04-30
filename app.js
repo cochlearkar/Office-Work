@@ -176,7 +176,7 @@ function loginAs(name) {
 
   // Show/hide admin controls
   document.getElementById("adminControls").style.display = isAdmin ? "block" : "none";
-  document.getElementById("staffStrip").style.display    = isAdmin ? "none"  : "block";
+  document.getElementById("staffStrip").style.display    = "none"; // counts shown in sunrise card
   document.getElementById("exportBtn").style.display     = isAdmin ? "grid"  : "none";
   document.getElementById("highAlertBtn").style.display  = isAdmin ? "grid"  : "none";
   document.getElementById("appreciationBtn").style.display = isAdmin ? "grid" : "none";
@@ -684,8 +684,8 @@ function renderStaffView() {
   });
 }
 
-// Sunrise briefing card — daily summary + motivational note
-async function _buildSunriseCard(el) {
+// Sunrise briefing card — render immediately with task counts, update meetings async
+function _buildSunriseCard(el) {
   const myTasks    = allTasks.filter(t => t.assignedTo === currentUser);
   const todayT     = myTasks.filter(t => t.status === "pending" && diffDays(t) === 0);
   const inProgT    = myTasks.filter(t => t.status === "in-progress");
@@ -720,15 +720,8 @@ async function _buildSunriseCard(el) {
   const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(),0,0)) / 86400000);
   const note = notes[dayOfYear % notes.length];
 
-  // Meeting count from ICS
+  // Meeting count — render card immediately with 0, update async after ICS loads
   var meetCount = 0;
-  try {
-    const text = await fetchICS();
-    const events = parseICS(text);
-    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-    const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
-    meetCount = events.filter(e => e.start >= todayStart && e.start <= todayEnd).length;
-  } catch(e) {}
 
   // Stat pills
   function pill(val, label) {
@@ -741,8 +734,11 @@ async function _buildSunriseCard(el) {
   // Use full name in card
   const fullName = currentUser;
 
+  // Render card immediately, then update meeting count async
   el.className = "sr-card";
-  el.innerHTML =
+  function _renderCard(mc) {
+    meetCount = mc;
+    el.innerHTML =
     '<div class="sr-bg" style="background:linear-gradient(135deg,' + gradFrom + ',' + gradTo + ')"></div>' +
     '<div class="sr-shine"></div>' +
     '<div class="sr-content">' +
@@ -756,11 +752,21 @@ async function _buildSunriseCard(el) {
         pill(todayT.length,      "Today",       "") +
         pill(inProgT.length,     "In Progress", "") +
         pill(toCompleteT.length, "To Complete", "") +
-        pill(meetCount,          "Meetings",    "") +
+        '<div class="sr-pill"><div class="sr-pill-num sr-meet-pill">–</div><div class="sr-pill-lbl">Meetings</div></div>' +
       '</div>' +
       '<div class="sr-divider"></div>' +
       '<div class="sr-note">' + note + '</div>' +
     '</div>';
+  }
+  _renderCard(0);
+  // Async: update meeting count without blocking card display
+  fetchICS().then(function(text) {
+    var events = parseICS(text);
+    var s = new Date(); s.setHours(0,0,0,0);
+    var e2 = new Date(); e2.setHours(23,59,59,999);
+    var cnt = events.filter(function(e){ return e.start>=s && e.start<=e2; }).length;
+    if (cnt !== 0) _renderCard(cnt);
+  }).catch(function(){});
 }
 // Extracted so praise wall async doesn't break rendering
 function buildStaffTaskSections() {
@@ -772,12 +778,8 @@ function buildStaffTaskSections() {
   const upcomingT  = active.filter(t => diffDays(t) > 0);
   const alertT     = active.filter(t => t.isHighAlert);
 
-  // Strip
-  var strip = '<div class="sstrip-pill sp-pending"><div class="snum">' + (active.length + inProgress.length) + '</div><div class="slbl">Pending</div></div>';
-  if (todayT.length)     strip += '<div class="sstrip-pill" style="background:var(--amber-l)"><div class="snum" style="color:var(--amber)">' + todayT.length + '</div><div class="slbl" style="color:#92400e">Today</div></div>';
-  if (inProgress.length) strip += '<div class="sstrip-pill" style="background:#eff6ff"><div class="snum" style="color:#1d4ed8">' + inProgress.length + '</div><div class="slbl" style="color:#1e40af">In Progress</div></div>';
-  if (overdueT.length)   strip += '<div class="sstrip-pill" style="background:#fffbeb"><div class="snum" style="color:#b45309">' + overdueT.length + '</div><div class="slbl" style="color:#92400e">To Be Completed</div></div>';
-  document.getElementById("staffStripInner").innerHTML = strip;
+  // Strip hidden for staff — counts shown in sunrise card above
+  document.getElementById("staffStripInner").innerHTML = "";
 
   if (!active.length && !inProgress.length) {
     const el = document.createElement("div");
@@ -792,32 +794,39 @@ function buildStaffTaskSections() {
     return '<span style="width:8px;height:8px;border-radius:50%;background:' + c + ';flex-shrink:0;margin-top:2px;display:inline-block"></span>';
   }
 
-  function dayBadge(t) {
+  function dayBadge(t, section) {
     var d = diffDays(t);
-    if (d === 0) return '<span class="sf-day-badge" style="color:#d97706;background:#fef3c7">Due today</span>';
+    // No badge for today section (obvious) or in-progress (obvious)
+    if (section === "today")       return "";
+    if (section === "in-progress") return "";
     if (d === -1) return '<span class="sf-day-badge" style="color:#b45309;background:#fef9c3">Due yesterday</span>';
     if (d < 0)   return '<span class="sf-day-badge" style="color:#b45309;background:#fef9c3">Due ' + Math.abs(d) + ' days ago</span>';
     if (d === 1) return '<span class="sf-day-badge" style="color:#0369a1;background:#e0f2fe">Due tomorrow</span>';
+    if (d === 0) return "";
     return '<span class="sf-day-badge" style="color:#0369a1;background:#e0f2fe">Due in ' + d + ' days</span>';
   }
 
   // Build a task row — tap to expand/collapse action drawer
-  function makeRow(t) {
+  function makeRow(t, section) {
     var isIP = t.status === "in-progress";
-    var ipBadge = isIP ? '<span class="sf-day-badge" style="color:#1d4ed8;background:#eff6ff">In Progress</span>' : "";
     var alertBadge = t.isHighAlert ? '<span class="sf-day-badge" style="color:#7c3aed;background:#f3e8ff">Alert</span>' : "";
+    var db = dayBadge(t, section);
+    var hasMeta = db || alertBadge;
 
-    // Action drawer (hidden by default, shown on tap)
-    var drawer = '<div class="sf-drawer" id="drawer-' + t.id + '" style="display:none">';
+    // Compact icon-only action tray
+    var tray = '<div class="sf-tray" id="drawer-' + t.id + '" style="display:none">';
     if (!isIP) {
-      drawer += '<button class="sf-action-btn sf-action-blue" onclick="event.stopPropagation();staffMoveIP(\''+ t.id +'\')">';
-      drawer += '<span class="sf-action-icon">⚙️</span>In Progress</button>';
+      tray += '<button class="sf-tray-btn" title="Move to In Progress" onclick="event.stopPropagation();staffMoveIP(\''+ t.id +'\')">' +
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>' +
+        '<span class="sf-tray-lbl">Working</span></button>';
     }
-    drawer += '<button class="sf-action-btn sf-action-green" onclick="event.stopPropagation();staffMarkDone(\''+ t.id +'\')">';
-    drawer += '<span class="sf-action-icon">✅</span>Mark Done</button>';
-    drawer += '<button class="sf-action-btn sf-action-chat" onclick="event.stopPropagation();openChat(\''+ t.id +'\')">';
-    drawer += '<span class="sf-action-icon">💬</span>Message<span class="chat-badge" id="cb-' + t.id + '" style="display:none;position:relative;top:0;right:0;margin-left:4px"></span></button>';
-    drawer += '</div>';
+    tray += '<button class="sf-tray-btn sf-tray-done" title="Mark Done" onclick="event.stopPropagation();staffMarkDone(\''+ t.id +'\')">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+      '<span class="sf-tray-lbl">Done</span></button>';
+    tray += '<button class="sf-tray-btn sf-tray-chat" title="Message" onclick="event.stopPropagation();openChat(\''+ t.id +'\')">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>' +
+      '<span class="sf-tray-lbl">Message</span><span class="chat-badge" id="cb-' + t.id + '" style="display:none"></span></button>';
+    tray += '</div>';
 
     return '<div class="sf-row" id="row-' + t.id + '" onclick="toggleStaffRow(\''+ t.id +'\')">' +
       '<div class="sf-row-main">' +
@@ -826,9 +835,9 @@ function buildStaffTaskSections() {
           '<div class="sf-title">' + t.title + '</div>' +
           '<span class="sf-chevron" id="chev-' + t.id + '">›</span>' +
         '</div>' +
-        '<div class="sf-meta">' + dayBadge(t) + ipBadge + alertBadge + '</div>' +
+        (hasMeta ? '<div class="sf-meta">' + db + alertBadge + '</div>' : "") +
       '</div>' +
-      drawer +
+      tray +
     '</div>';
   }
 
